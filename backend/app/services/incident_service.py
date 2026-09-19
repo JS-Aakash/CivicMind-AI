@@ -460,5 +460,317 @@ class IncidentService:
         logger.info(f"Updated incident {i_id} status to {new_status}")
         return inc
 
+    def update_complaint_status(
+        self,
+        complaint_id: str,
+        new_status: str,
+        actor: str = "Municipal Officer",
+        notes: Optional[str] = None,
+        assigned_officer: Optional[str] = None,
+        department_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Transitions single complaint across real 9-stage lifecycle:
+        SUBMITTED -> AI_ANALYSIS -> TRIAGED -> ROUTED -> ASSIGNED -> IN_PROGRESS -> FIELD_VERIFICATION -> RESOLVED -> CLOSED (or REOPENED)
+        """
+        target = None
+        for c in self._complaints_store.values():
+            if str(c.get("id")) == complaint_id or str(c.get("complaint_code")) == complaint_id:
+                target = c
+                break
+
+        if not target:
+            raise ValueError(f"Complaint {complaint_id} not found.")
+
+        old_status = target.get("status", "submitted")
+        target["status"] = new_status.lower()
+        target["updated_at"] = datetime.now(timezone.utc).isoformat()
+        if assigned_officer:
+            target["assigned_officer"] = assigned_officer
+        if department_name:
+            target["department_name"] = department_name
+
+        # Append to audit trail
+        try:
+            from app.api.routes.command_center import record_audit_event
+            record_audit_event(
+                event_type="COMPLAINT_STATUS_CHANGED",
+                target_type="complaint",
+                target_id=target.get("complaint_code", complaint_id),
+                actor=actor,
+                summary=f"Status changed from {old_status.upper()} to {new_status.upper()}" + (f": {notes}" if notes else ""),
+                details={
+                    "previous_status": old_status,
+                    "new_status": new_status.lower(),
+                    "assigned_officer": assigned_officer,
+                    "notes": notes,
+                },
+            )
+        except Exception as aud_err:
+            logger.warning(f"Status change audit error: {aud_err}")
+
+        self.save_to_disk()
+        return target
+
+    def resolve_complaint(
+        self,
+        complaint_id: str,
+        resolution_note: str,
+        resolver_id: str = "officer-01",
+        resolver_name: str = "Ward Inspection Officer",
+        resolution_photo: Optional[str] = None,
+        resolver_lat: Optional[float] = None,
+        resolver_lng: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Resolves individual complaint with mandatory resolution note, evidence, and optional geofence verification.
+        """
+        import math
+        from app.core.config import Settings
+        cfg = Settings()
+
+        target = None
+        for c in self._complaints_store.values():
+            if str(c.get("id")) == complaint_id or str(c.get("complaint_code")) == complaint_id:
+                target = c
+                break
+
+        if not target:
+            raise ValueError(f"Complaint {complaint_id} not found.")
+
+        target_lat = target.get("latitude")
+        target_lng = target.get("longitude")
+        dist_meters = None
+        geofence_verified = False
+
+        if target_lat is not None and target_lng is not None and resolver_lat is not None and resolver_lng is not None:
+            # Haversine distance
+            R = 6371000.0
+            p1 = math.radians(target_lat)
+            p2 = math.radians(resolver_lat)
+            dp = math.radians(resolver_lat - target_lat)
+            dl = math.radians(resolver_lng - target_lng)
+            a = math.sin(dp / 2.0) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2.0) ** 2
+            c_val = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+            dist_meters = round(R * c_val, 1)
+            geofence_verified = dist_meters <= cfg.RESOLUTION_GEOFENCE_RADIUS_METERS
+
+        if cfg.RESOLUTION_GEOFENCE_ENABLED:
+            if resolver_lat is None or resolver_lng is None:
+                raise ValueError("GPS device location is required for field verification before resolving.")
+            if not geofence_verified:
+                raise ValueError(
+                    f"You must be near the incident location to verify resolution. Measured distance: {dist_meters}m (Allowed: {cfg.RESOLUTION_GEOFENCE_RADIUS_METERS}m)."
+                )
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        res_payload = {
+            "resolved_at": now_iso,
+            "resolver_id": resolver_id,
+            "resolver_name": resolver_name,
+            "resolution_note": resolution_note,
+            "resolution_photo": resolution_photo,
+            "geofence_verified": geofence_verified,
+            "resolver_coordinates": {"latitude": resolver_lat, "longitude": resolver_lng} if resolver_lat else None,
+            "target_coordinates": {"latitude": target_lat, "longitude": target_lng} if target_lat else None,
+            "distance_meters": dist_meters,
+        }
+
+        old_status = target.get("status", "in_progress")
+        target["status"] = "resolved"
+        target["resolved_at"] = now_iso
+        target["resolution_info"] = res_payload
+        target["updated_at"] = now_iso
+
+        # Log audit
+        try:
+            from app.api.routes.command_center import record_audit_event
+            record_audit_event(
+                event_type="COMPLAINT_RESOLVED",
+                target_type="complaint",
+                target_id=target.get("complaint_code", complaint_id),
+                actor=resolver_name,
+                summary=f"Complaint resolved by {resolver_name}: {resolution_note[:100]}",
+                details={
+                    "previous_status": old_status,
+                    "new_status": "resolved",
+                    "resolution_note": resolution_note,
+                    "resolution_photo": resolution_photo,
+                    "geofence_verified": geofence_verified,
+                    "distance_meters": dist_meters,
+                    "resolver_coordinates": {"latitude": resolver_lat, "longitude": resolver_lng} if resolver_lat else None,
+                },
+            )
+        except Exception as aud_err:
+            logger.warning(f"Resolution audit error: {aud_err}")
+
+        self.save_to_disk()
+        return target
+
+    def resolve_incident(
+        self,
+        incident_id: str,
+        resolution_note: str,
+        resolver_id: str = "officer-01",
+        resolver_name: str = "Municipal Incident Commander",
+        resolution_photo: Optional[str] = None,
+        resolver_lat: Optional[float] = None,
+        resolver_lng: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Resolves an incident with proof/geofencing and AUTOMATICALLY propagates resolution to ALL linked member complaints.
+        """
+        import math
+        from app.core.config import Settings
+        cfg = Settings()
+
+        inc = self.get_incident(incident_id)
+        if not inc:
+            raise ValueError(f"Incident {incident_id} not found.")
+
+        target_lat = inc.get("center_latitude")
+        target_lng = inc.get("center_longitude")
+        dist_meters = None
+        geofence_verified = False
+
+        if target_lat is not None and target_lng is not None and resolver_lat is not None and resolver_lng is not None:
+            R = 6371000.0
+            p1 = math.radians(target_lat)
+            p2 = math.radians(resolver_lat)
+            dp = math.radians(resolver_lat - target_lat)
+            dl = math.radians(resolver_lng - target_lng)
+            a = math.sin(dp / 2.0) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2.0) ** 2
+            c_val = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+            dist_meters = round(R * c_val, 1)
+            geofence_verified = dist_meters <= cfg.RESOLUTION_GEOFENCE_RADIUS_METERS
+
+        if cfg.RESOLUTION_GEOFENCE_ENABLED:
+            if resolver_lat is None or resolver_lng is None:
+                raise ValueError("GPS device location is required for field verification before resolving.")
+            if not geofence_verified:
+                raise ValueError(
+                    f"You must be near the incident location to verify resolution. Measured distance: {dist_meters}m (Allowed: {cfg.RESOLUTION_GEOFENCE_RADIUS_METERS}m)."
+                )
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        res_payload = {
+            "resolved_at": now_iso,
+            "resolver_id": resolver_id,
+            "resolver_name": resolver_name,
+            "resolution_note": resolution_note,
+            "resolution_photo": resolution_photo,
+            "geofence_verified": geofence_verified,
+            "resolver_coordinates": {"latitude": resolver_lat, "longitude": resolver_lng} if resolver_lat else None,
+            "target_coordinates": {"latitude": target_lat, "longitude": target_lng} if target_lat else None,
+            "distance_meters": dist_meters,
+            "resolved_via_incident": inc.get("incident_code") or str(inc["id"]),
+        }
+
+        i_id = str(inc["id"])
+        inc["status"] = "resolved"
+        inc["resolved_at"] = now_iso
+        inc["resolution_info"] = res_payload
+        inc["updated_at"] = now_iso
+        self._incidents_store[i_id] = inc
+
+        # Propagate to ALL confirmed member complaints
+        linked_cids = inc.get("complaint_ids", [])
+        resolved_complaints_count = 0
+        for cid in linked_cids:
+            c = self._complaints_store.get(str(cid))
+            if c:
+                c["status"] = "resolved"
+                c["resolved_at"] = now_iso
+                c["resolution_info"] = res_payload
+                c["updated_at"] = now_iso
+                resolved_complaints_count += 1
+                try:
+                    from app.api.routes.command_center import record_audit_event
+                    record_audit_event(
+                        event_type="COMPLAINT_RESOLVED_VIA_INCIDENT",
+                        target_type="complaint",
+                        target_id=c.get("complaint_code", str(cid)),
+                        actor=resolver_name,
+                        summary=f"Resolved via parent Incident {inc.get('incident_code') or i_id}: {resolution_note[:80]}",
+                        details={
+                            "incident_id": i_id,
+                            "incident_code": inc.get("incident_code"),
+                            "resolution_note": resolution_note,
+                            "resolution_photo": resolution_photo,
+                        },
+                    )
+                except Exception as aud_err:
+                    logger.warning(f"Linked complaint resolution audit error: {aud_err}")
+
+        # Incident Audit
+        try:
+            from app.api.routes.command_center import record_audit_event
+            record_audit_event(
+                event_type="INCIDENT_RESOLVED",
+                target_type="incident",
+                target_id=inc.get("incident_code") or i_id,
+                actor=resolver_name,
+                summary=f"Incident resolved by {resolver_name} ({resolved_complaints_count} member complaints auto-resolved)",
+                details={
+                    "resolution_note": resolution_note,
+                    "resolution_photo": resolution_photo,
+                    "linked_complaints_count": resolved_complaints_count,
+                    "geofence_verified": geofence_verified,
+                    "distance_meters": dist_meters,
+                    "resolver_coordinates": {"latitude": resolver_lat, "longitude": resolver_lng} if resolver_lat else None,
+                },
+            )
+        except Exception as aud_err:
+            logger.warning(f"Incident resolution audit error: {aud_err}")
+
+        self.save_to_disk()
+        logger.info(f"Resolved incident {i_id} and propagated resolution to {resolved_complaints_count} complaints.")
+        return inc
+
+    def reopen_complaint(
+        self,
+        complaint_id: str,
+        reason: str,
+        citizen_feedback: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Reopens a resolved complaint when citizen feedback indicates issue is unresolved.
+        """
+        target = None
+        for c in self._complaints_store.values():
+            if str(c.get("id")) == complaint_id or str(c.get("complaint_code")) == complaint_id:
+                target = c
+                break
+
+        if not target:
+            raise ValueError(f"Complaint {complaint_id} not found.")
+
+        old_status = target.get("status", "resolved")
+        target["status"] = "reopened"
+        target["updated_at"] = datetime.now(timezone.utc).isoformat()
+        target["reopen_reason"] = reason
+        target["citizen_feedback"] = citizen_feedback
+
+        try:
+            from app.api.routes.command_center import record_audit_event
+            record_audit_event(
+                event_type="COMPLAINT_REOPENED",
+                target_type="complaint",
+                target_id=target.get("complaint_code", complaint_id),
+                actor="Citizen Feedback Loop",
+                summary=f"Citizen marked issue as UNRESOLVED. Reopened for municipal review: {reason[:100]}",
+                details={
+                    "previous_status": old_status,
+                    "new_status": "reopened",
+                    "reason": reason,
+                    "citizen_feedback": citizen_feedback,
+                },
+            )
+        except Exception as aud_err:
+            logger.warning(f"Reopen audit error: {aud_err}")
+
+        self.save_to_disk()
+        return target
+
 
 incident_service = IncidentService()

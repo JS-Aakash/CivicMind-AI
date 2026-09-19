@@ -2,6 +2,42 @@
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+import type {
+  ComplaintListResponse,
+  Complaint,
+  IncidentListResponse,
+  Incident,
+  MapDataResponse,
+  LanguageDetectResponse,
+  GrievanceAnalyzeResponse,
+  ModelStatusResponse,
+  HealthResponse,
+  MapMarker,
+  ComplaintDuplicatesResponse,
+  MapIncidentMarker,
+  TrainingStatusResponse,
+  ModelMetricsResponse,
+  DatasetStatsResponse,
+  RoutingKPIsResponse,
+  DepartmentTarget,
+  VoiceTranscriptionItem,
+  VisionAnalysisItem,
+  CitizenTrackingResponse,
+  MultimodalModelStatus,
+  CommandCenterOverviewResponse,
+  AnalyticsSummaryResponse,
+  AnalyticsTrendsResponse,
+  AnalyticsCategoriesResponse,
+  AnalyticsDepartmentsResponse,
+  AnalyticsLanguagesResponse,
+  AnalyticsSLAResponse,
+  ReviewQueueResponse,
+  OfficerDecisionPayload,
+  FeedbackRecordsResponse,
+  AuditTrailResponse,
+  SystemHealthDetailsResponse,
+} from "./types";
+
 async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { "Content-Type": "application/json", ...options?.headers },
@@ -13,18 +49,6 @@ async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
   }
   return res.json();
 }
-
-import type {
-  ComplaintListResponse,
-  Complaint,
-  IncidentListResponse,
-  Incident,
-  MapDataResponse,
-  LanguageDetectResponse,
-  GrievanceAnalyzeResponse,
-  ModelStatusResponse,
-  HealthResponse,
-} from "./types";
 
 // Health
 export const getHealth = () => fetchAPI<HealthResponse>("/api/health");
@@ -58,68 +82,42 @@ export const listGrievances = (params?: {
 export const getGrievance = (id: string) =>
   fetchAPI<Complaint>(`/api/grievances/${id}`);
 
-export const analyzeGrievance = (data: {
-  text: string;
-  location_text?: string;
-  latitude?: number;
-  longitude?: number;
-}) =>
+export const analyzeGrievance = (
+  payload: string | { text: string; location_text?: string; latitude?: number; longitude?: number }
+) =>
   fetchAPI<GrievanceAnalyzeResponse>("/api/grievances/analyze", {
     method: "POST",
-    body: JSON.stringify(data),
+    body: typeof payload === "string" ? JSON.stringify({ text: payload }) : JSON.stringify(payload),
   });
 
-export const createGrievance = (data: {
-  text?: string;
-  media_ids?: string[];
-  audio_id?: string;
-  raw_transcript?: string;
-  edited_transcript?: string;
-  location_text?: string;
+export const createGrievance = (payload: {
+  text: string;
   latitude?: number;
   longitude?: number;
-  ward?: string;
+  location_text?: string;
+  audio_url?: string;
+  image_url?: string;
+  media_id?: string;
+  media_ids?: string[];
+  audio_id?: string;
+  image_id?: string;
+  [key: string]: any;
 }) =>
   fetchAPI<Complaint>("/api/grievances", {
     method: "POST",
-    body: JSON.stringify(data),
+    body: JSON.stringify(payload),
   });
-
-// Map
-export const getMapComplaints = (params?: {
-  category?: string;
-  priority?: string;
-  incident_id?: string;
-  min_lat?: number;
-  max_lat?: number;
-  min_lng?: number;
-  max_lng?: number;
-}) => {
-  const qs = new URLSearchParams(
-    Object.entries(params || {})
-      .filter(([, v]) => v !== undefined)
-      .map(([k, v]) => [k, String(v)])
-  ).toString();
-  return fetchAPI<MapDataResponse>(`/api/map/complaints${qs ? "?" + qs : ""}`);
-};
-
-export const getMapIncidents = (params?: { category?: string; priority?: string; status?: string }) => {
-  const qs = new URLSearchParams(
-    Object.entries(params || {})
-      .filter(([, v]) => v !== undefined)
-      .map(([k, v]) => [k, String(v)])
-  ).toString();
-  return fetchAPI<MapIncidentMarker[]>(`/api/map/incidents${qs ? "?" + qs : ""}`);
-};
 
 // Incidents
 export const listIncidents = (params?: {
-  category?: string;
-  priority?: string;
-  status?: string;
-  trend?: string;
   page?: number;
   page_size?: number;
+  status?: string;
+  category?: string;
+  priority?: string;
+  trend?: string;
+  emerging_only?: boolean;
+  [key: string]: any;
 }) => {
   const qs = new URLSearchParams(
     Object.entries(params || {})
@@ -129,13 +127,56 @@ export const listIncidents = (params?: {
   return fetchAPI<IncidentListResponse>(`/api/incidents${qs ? "?" + qs : ""}`);
 };
 
-export const getIncident = (id: string) => fetchAPI<Incident>(`/api/incidents/${id}`);
+export const getIncident = (id: string) =>
+  fetchAPI<Incident>(`/api/incidents/${id}`);
 
-export const recomputeIncidents = (params?: { hours?: number; category?: string; dry_run?: boolean }) =>
-  fetchAPI<any>("/api/incidents/recompute", {
-    method: "POST",
-    body: JSON.stringify(params || { hours: 72, dry_run: false }),
-  });
+export const triggerClustering = (params?: any) =>
+  fetchAPI<{ status: string; incidents_created: number; incidents_updated: number; total_incidents: number }>(
+    "/api/incidents/cluster",
+    {
+      method: "POST",
+      body: params ? JSON.stringify(params) : undefined,
+    }
+  );
+
+export const recomputeIncidents = triggerClustering;
+
+// Map
+export const getMapData = (params?: {
+  ne_lat?: number;
+  ne_lng?: number;
+  sw_lat?: number;
+  sw_lng?: number;
+  category?: string;
+  priority?: string;
+  status?: string;
+  show_incidents?: boolean;
+}) => {
+  const qs = new URLSearchParams(
+    Object.entries(params || {})
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, String(v)])
+  ).toString();
+  return fetchAPI<MapDataResponse>(`/api/map/data${qs ? "?" + qs : ""}`);
+};
+
+export const getMapComplaints = (params?: { category?: string; priority?: string; status?: string }) => {
+  const qs = new URLSearchParams(
+    Object.entries(params || {})
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, String(v)])
+  ).toString();
+  return fetchAPI<any>(`/api/map/complaints${qs ? "?" + qs : ""}`);
+};
+
+export const getMapIncidents = (params?: { category?: string; priority?: string; status?: string }) => {
+  const qs = new URLSearchParams(
+    Object.entries(params || {})
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, String(v)])
+  ).toString();
+  return fetchAPI<any>(`/api/map/incidents${qs ? "?" + qs : ""}`);
+};
 
 export const updateIncidentStatus = (id: string, status: string, notes?: string) =>
   fetchAPI<Incident>(`/api/incidents/${id}/status`, {
@@ -156,20 +197,10 @@ export const splitIncident = (id: string, complaint_ids_for_new_incident: string
   });
 
 // Duplicate Detection & Relationships
-import type { ComplaintDuplicatesResponse, MapIncidentMarker } from "./types";
-
 export const getComplaintDuplicates = (id: string) =>
   fetchAPI<ComplaintDuplicatesResponse>(`/api/grievances/${id}/duplicates`);
 
 // Module 2 — Training, Metrics & Dataset Management
-import type {
-  TrainingStatusResponse,
-  ModelMetricsResponse,
-  DatasetStatsResponse,
-  RoutingKPIsResponse,
-  DepartmentTarget,
-} from "./types";
-
 export const getTrainingStatus = () =>
   fetchAPI<TrainingStatusResponse>("/api/model/training-status");
 
@@ -230,13 +261,6 @@ export const getComplaintSLA = (id: string) =>
   fetchAPI<any>(`/api/grievances/${id}/sla`);
 
 // ─── Module 5: Media & Multimodal Intelligence ──────────────────────────────
-import type {
-  VoiceTranscriptionItem,
-  VisionAnalysisItem,
-  CitizenTrackingResponse,
-  MultimodalModelStatus,
-} from "./types";
-
 export const uploadAudio = async (file: File, language_hint?: string) => {
   const formData = new FormData();
   formData.append("file", file);
@@ -282,7 +306,6 @@ export const getVisionHealth = () =>
   fetchAPI<any>("/api/health/vision");
 
 // ─── Module 5: Citizen Complaint Tracking ────────────────────────────────────
-
 export const trackCitizenComplaint = (complaint_code: string) =>
   fetchAPI<CitizenTrackingResponse>(`/api/citizen/complaints/${complaint_code}`);
 
@@ -290,24 +313,8 @@ export const listCitizenComplaints = (limit: number = 20) =>
   fetchAPI<{ complaints: any[]; total: number }>(`/api/citizen/my-complaints?limit=${limit}`);
 
 // ─── Module 6: Command Center & Analytics API Functions ──────────────────────
-import type {
-  CommandCenterOverviewResponse,
-  AnalyticsSummaryResponse,
-  AnalyticsTrendsResponse,
-  AnalyticsCategoriesResponse,
-  AnalyticsDepartmentsResponse,
-  AnalyticsLanguagesResponse,
-  AnalyticsSLAResponse,
-  ReviewQueueResponse,
-  OfficerDecisionPayload,
-  FeedbackRecordsResponse,
-  AuditTrailResponse,
-  SystemHealthDetailsResponse,
-} from "./types";
-
 export const getCommandCenterOverview = () =>
   fetchAPI<CommandCenterOverviewResponse>("/api/command-center/overview");
-
 
 export const getAnalyticsSummary = (timeframe: string = "7d", category?: string, department?: string) => {
   const params = new URLSearchParams({ timeframe });
@@ -352,4 +359,75 @@ export const getAuditTrail = (limit: number = 50) =>
 export const getDetailedSystemHealth = () =>
   fetchAPI<SystemHealthDetailsResponse>("/api/system/health");
 
+// ─── Module 7: Resolution & Case Management API Functions ────────────────────
 
+export const loginAdmin = (username: string, password: string) =>
+  fetchAPI<{
+    access_token: string;
+    token_type: string;
+    user: { username: string; role: string; name: string };
+  }>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+
+export const getAuthMe = () =>
+  fetchAPI<{
+    authenticated: boolean;
+    user: { username: string; role: string; name: string };
+  }>("/api/auth/me");
+
+export const updateGrievanceStatus = (
+  id: string,
+  payload: { status: string; note?: string; assigned_officer?: string }
+) =>
+  fetchAPI<Complaint>(`/api/grievances/${id}/status`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const resolveGrievance = (
+  id: string,
+  payload: {
+    resolution_note: string;
+    resolved_by: string;
+    proof_image_url?: string;
+    resolver_lat?: number;
+    resolver_lon?: number;
+    action_taken?: string;
+  }
+) =>
+  fetchAPI<Complaint>(`/api/grievances/${id}/resolve`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const reopenGrievance = (
+  id: string,
+  payload: { reopen_reason: string; citizen_feedback?: string }
+) =>
+  fetchAPI<Complaint>(`/api/grievances/${id}/reopen`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const resolveIncident = (
+  id: string,
+  payload: {
+    resolution_note: string;
+    resolved_by: string;
+    proof_image_url?: string;
+    resolver_lat?: number;
+    resolver_lon?: number;
+    action_taken?: string;
+  }
+) =>
+  fetchAPI<{
+    incident: Incident;
+    resolved_complaints_count: number;
+    propagated_complaint_ids: string[];
+    message: string;
+  }>(`/api/incidents/${id}/resolve`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });

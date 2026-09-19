@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     DEMO_MAP_LAT: float = 13.0827
     DEMO_MAP_LNG: float = 80.2707
 
+    # Admin Auth
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = "civicmind2026"
+    JWT_SECRET_KEY: str = "civicmind-demo-secret-2026"
+
+    # Resolution Geofencing
+    RESOLUTION_GEOFENCE_ENABLED: bool = False
+    RESOLUTION_GEOFENCE_RADIUS_METERS: float = 200.0
+
     @property
     def muril_path(self) -> Path:
         return Path(self.MURIL_LOCAL_PATH)

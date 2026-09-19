@@ -261,10 +261,15 @@ class ComplaintResponse(BaseModel):
     secondary_departments: Optional[List[Dict[str, Any]]] = []
     routing_decision: Optional[str] = "AUTO_ROUTE"
     requires_human_review: Optional[bool] = False
+    assigned_officer: Optional[str] = None
     sla_due_at: Optional[datetime] = None
     sla_status: Optional[str] = "within_sla"
     incident_id: Optional[UUID | str] = None
-    status: str = "pending"
+    status: str = "submitted"
+    resolved_at: Optional[str] = None
+    resolution_info: Optional[Dict[str, Any]] = None
+    reopen_reason: Optional[str] = None
+    citizen_feedback: Optional[str] = None
     is_demo: bool = False
     created_at: datetime
     updated_at: datetime
@@ -274,6 +279,36 @@ class ComplaintResponse(BaseModel):
     multimodal_consistency: Optional[Dict[str, Any]] = None
 
     model_config = {"from_attributes": True}
+
+
+class StatusUpdateRequest(BaseModel):
+    status: str
+    notes: Optional[str] = None
+    assigned_officer: Optional[str] = None
+    department_name: Optional[str] = None
+
+
+class ComplaintResolveRequest(BaseModel):
+    resolution_note: str = Field(..., min_length=5, max_length=2000)
+    resolution_photo: Optional[str] = None
+    resolver_id: Optional[str] = "officer-01"
+    resolver_name: Optional[str] = "Ward Inspection Officer"
+    resolver_lat: Optional[float] = None
+    resolver_lng: Optional[float] = None
+
+
+class IncidentResolveRequest(BaseModel):
+    resolution_note: str = Field(..., min_length=5, max_length=2000)
+    resolution_photo: Optional[str] = None
+    resolver_id: Optional[str] = "officer-01"
+    resolver_name: Optional[str] = "Municipal Incident Commander"
+    resolver_lat: Optional[float] = None
+    resolver_lng: Optional[float] = None
+
+
+class ComplaintReopenRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=1000)
+    citizen_feedback: Optional[str] = None
 
 
 class ComplaintListResponse(BaseModel):
@@ -609,6 +644,7 @@ class CitizenTrackingResponse(BaseModel):
     status: str
     status_display: str
     department_name: str
+    assigned_officer: Optional[str] = None
     expected_sla_hours: int
     sla_due_at: Optional[datetime] = None
     timeline: List[CitizenStatusTimelineEvent] = []
@@ -616,6 +652,10 @@ class CitizenTrackingResponse(BaseModel):
     ai_summary: str
     incident_title: Optional[str] = None
     citizen_response_message: Dict[str, str]  # {"en": "...", "ta": "...", "hi": "..."}
+    resolved_at: Optional[str] = None
+    resolution_info: Optional[Dict[str, Any]] = None
+    reopen_eligible: bool = False
+    reopen_reason: Optional[str] = None
 
 
 class MultimodalModelStatus(BaseModel):

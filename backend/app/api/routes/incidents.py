@@ -24,6 +24,7 @@ from app.schemas.schemas import (
     MergeIncidentsRequest,
     SplitIncidentRequest,
     IncidentStatusUpdateRequest,
+    IncidentResolveRequest,
 )
 from app.services.incident_service import incident_service
 from app.data.demo_data import DEMO_COMPLAINTS
@@ -281,6 +282,28 @@ async def update_incident_status(incident_id: str, req: IncidentStatusUpdateRequ
         return _to_incident_response(updated)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/incidents/{incident_id}/resolve", response_model=IncidentResponse)
+async def resolve_incident(incident_id: str, req: IncidentResolveRequest):
+    """
+    Resolves incident with mandatory resolution evidence, resolver details, optional geofence verification,
+    and AUTOMATICALLY propagates resolution to all linked member complaints.
+    """
+    _ensure_service_initialized()
+    try:
+        updated = incident_service.resolve_incident(
+            incident_id=incident_id,
+            resolution_note=req.resolution_note,
+            resolution_photo=req.resolution_photo,
+            resolver_id=req.resolver_id or "officer-01",
+            resolver_name=req.resolver_name or "Municipal Incident Commander",
+            resolver_lat=req.resolver_lat,
+            resolver_lng=req.resolver_lng,
+        )
+        return _to_incident_response(updated)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/incidents/{incident_id}/complaints", response_model=ComplaintListResponse)

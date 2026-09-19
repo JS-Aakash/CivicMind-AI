@@ -167,9 +167,12 @@ async def get_command_center_overview():
     incidents = list(incident_service._incidents_store.values())
 
     total_complaints = len(complaints)
-    critical_count = sum(1 for c in complaints if str(c.get("priority", "")).lower() == "critical")
-    in_progress_count = sum(1 for c in complaints if str(c.get("status", "")).lower() in ["in_progress", "routed", "acknowledged", "open"])
+    submitted_count = sum(1 for c in complaints if str(c.get("status", "")).lower() in ["submitted", "ai_analysis", "triaged"])
+    in_progress_count = sum(1 for c in complaints if str(c.get("status", "")).lower() in ["in_progress", "assigned", "routed", "open"])
+    field_verification_count = sum(1 for c in complaints if str(c.get("status", "")).lower() == "field_verification")
     resolved_count = sum(1 for c in complaints if str(c.get("status", "")).lower() in ["resolved", "closed"])
+    reopened_count = sum(1 for c in complaints if str(c.get("status", "")).lower() == "reopened")
+    critical_count = sum(1 for c in complaints if str(c.get("priority", "")).lower() == "critical")
     review_count = sum(1 for c in complaints if c.get("requires_human_review") or float(c.get("confidence", 1.0) or 1.0) < 0.85)
 
     if resolved_count > 0:
@@ -182,8 +185,8 @@ async def get_command_center_overview():
     inc_active = sum(1 for inc in incidents if str(inc.get("status", "")).lower() in ["detected", "investigating", "acknowledged", "in_progress", "emerging"])
     inc_emerging = sum(1 for inc in incidents if inc.get("is_emerging") or str(inc.get("trend", "")).upper() == "RISING")
 
-    sla_at_risk = sum(1 for c in complaints if str(c.get("priority", "")).lower() in ["critical", "high"] and str(c.get("status", "")).lower() in ["open", "in_progress"])
-    sla_breached = sum(1 for c in complaints if str(c.get("status", "")).lower() == "open" and str(c.get("priority", "")).lower() == "critical")
+    sla_at_risk = sum(1 for c in complaints if str(c.get("priority", "")).lower() in ["critical", "high"] and str(c.get("status", "")).lower() in ["open", "in_progress", "submitted"])
+    sla_breached = sum(1 for c in complaints if str(c.get("status", "")).lower() in ["open", "submitted"] and str(c.get("priority", "")).lower() == "critical")
 
     # Critical Alerts & Emerging Insights from active grievances
     critical_alerts = []
@@ -253,12 +256,15 @@ async def get_command_center_overview():
         "kpis": {
             "total_complaints": total_complaints,
             "complaints_growth_pct": 8.4,
+            "submitted_count": submitted_count,
+            "in_progress_count": in_progress_count,
+            "field_verification_count": field_verification_count,
+            "resolved_count": resolved_count,
+            "reopened_count": reopened_count,
             "critical_count": critical_count,
             "immediate_attention_count": critical_count,
             "active_incidents": inc_active or inc_total,
             "emerging_incidents": inc_emerging,
-            "in_progress_count": in_progress_count,
-            "resolved_count": resolved_count,
             "resolution_rate_pct": resolution_rate,
             "human_review_queue_count": review_count,
             "sla_at_risk_count": sla_at_risk,

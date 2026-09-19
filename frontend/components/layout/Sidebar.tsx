@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Activity,
 } from "lucide-react";
+import { clearAuthSession } from "@/lib/auth";
 
 interface NavItem {
   href: string;
@@ -60,9 +61,21 @@ const SECTIONS: { label: string; items: NavItem[] }[] = [
   },
 ];
 
-export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
+interface SidebarProps {
+  collapsed?: boolean;
+  setCollapsed?: (collapsed: boolean) => void;
+}
+
+export function Sidebar({ collapsed: propCollapsed, setCollapsed: propSetCollapsed }: SidebarProps) {
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
+  const collapsed = propCollapsed !== undefined ? propCollapsed : internalCollapsed;
+  const setCollapsed = propSetCollapsed || setInternalCollapsed;
   const pathname = usePathname();
+
+  const handleLogout = () => {
+    clearAuthSession();
+    window.location.href = "/admin/login";
+  };
 
   return (
     <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
@@ -93,6 +106,18 @@ export function Sidebar() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Persistent Test Complaint Button for Admin */}
+      <div style={{ padding: "10px 8px 6px 8px" }}>
+        <Link
+          href="/report"
+          className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 shadow-md shadow-cyan-500/20 transition-all text-center no-underline"
+          title="Submit Test Complaint"
+        >
+          <span style={{ fontSize: "14px", lineHeight: 1 }}>+</span>
+          {!collapsed && <span>Submit Test Complaint</span>}
+        </Link>
       </div>
 
       {/* Navigation Sections */}
@@ -146,6 +171,53 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {/* Footer Links & Logout */}
+      <div style={{ padding: "10px 8px", borderTop: "1px solid var(--brand-border)" }}>
+        <Link
+          href="/"
+          className="sidebar-item"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            padding: "8px 10px",
+            borderRadius: "8px",
+            fontSize: "12px",
+            color: "#94a3b8",
+            marginBottom: "4px",
+            textDecoration: "none",
+          }}
+          title="Citizen Portal"
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: 14 }}>🏛️</span>
+            {!collapsed && <span>Citizen Portal</span>}
+          </div>
+        </Link>
+        <button
+          onClick={handleLogout}
+          className="sidebar-item"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            width: "100%",
+            padding: "8px 10px",
+            borderRadius: "8px",
+            fontSize: "12px",
+            color: "#f87171",
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            textAlign: "left",
+          }}
+          title="Sign Out"
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: 14 }}>🚪</span>
+            {!collapsed && <span>Sign Out</span>}
+          </div>
+        </button>
+      </div>
 
       {/* Collapse toggle button */}
       <button

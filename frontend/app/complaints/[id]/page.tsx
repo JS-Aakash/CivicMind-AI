@@ -19,7 +19,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { getGrievance, overrideComplaintDecision, reviewComplaint, getDepartments, getComplaintDuplicates } from "@/lib/api";
+import { getGrievance, overrideComplaintDecision, reviewComplaint, getDepartments, getComplaintDuplicates, resolveGrievance, updateGrievanceStatus } from "@/lib/api";
 import type { Complaint, ComplaintDuplicatesResponse } from "@/lib/types";
 import { AIAnalysisPanel } from "@/components/AIAnalysisPanel";
 import { PriorityBadge } from "@/components/PriorityBadge";
@@ -38,6 +38,7 @@ export default function ComplaintDetailPage() {
 
   // Override / Review state
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
+  const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
   const [departments, setDepartments] = useState<any[]>([]);
   const [overrideCategory, setOverrideCategory] = useState("");
   const [overridePriority, setOverridePriority] = useState("");
@@ -46,6 +47,16 @@ export default function ComplaintDetailPage() {
   const [officerName, setOfficerName] = useState("Officer J. Sharma");
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
+  // Resolution modal state
+  const [resolutionNote, setResolutionNote] = useState("");
+  const [resolvedBy, setResolvedBy] = useState("Officer J. Sharma (JE - Ward 112)");
+  const [proofImageUrl, setProofImageUrl] = useState("");
+  const [actionTaken, setActionTaken] = useState("Permanent structural rectification completed");
+  const [resolverLat, setResolverLat] = useState<number | undefined>(undefined);
+  const [resolverLon, setResolverLon] = useState<number | undefined>(undefined);
+  const [gpsCapturing, setGpsCapturing] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
+
   useEffect(() => {
     getGrievance(id)
       .then((c) => {
@@ -53,6 +64,8 @@ export default function ComplaintDetailPage() {
         setOverrideCategory(c.category || "water");
         setOverridePriority(c.priority || "medium");
         setOverrideDepartment(c.department_id || "water_supply");
+        if (c.latitude) setResolverLat(c.latitude);
+        if (c.longitude) setResolverLon(c.longitude);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -65,6 +78,68 @@ export default function ComplaintDetailPage() {
       .then((res) => setDepartments(res.departments || []))
       .catch(() => {});
   }, [id]);
+
+  const captureGPS = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+    setGpsCapturing(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setResolverLat(pos.coords.latitude);
+        setResolverLon(pos.coords.longitude);
+        setGpsCapturing(false);
+      },
+      (err) => {
+        alert("GPS capture failed: " + err.message);
+        setGpsCapturing(false);
+      },
+      { enableHighAccuracy: true, timeout: 5000 }
+    );
+  };
+
+  const handleStatusChange = async (newStatus: string) => {
+    try {
+      const updated = await updateGrievanceStatus(id, {
+        status: newStatus,
+        assigned_officer: officerName,
+        note: `Status advanced to ${newStatus} by ${officerName}`,
+      });
+      setComplaint(updated);
+      setActionSuccess(`Status updated to ${newStatus.toUpperCase()}`);
+      setTimeout(() => setActionSuccess(null), 4000);
+    } catch (e: any) {
+      alert(`Failed to update status: ${e.message}`);
+    }
+  };
+
+  const handleResolveSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resolutionNote.trim()) {
+      alert("Please provide resolution notes detailing work done.");
+      return;
+    }
+    setIsResolving(true);
+    try {
+      const updated = await resolveGrievance(id, {
+        resolution_note: resolutionNote,
+        resolved_by: resolvedBy,
+        proof_image_url: proofImageUrl || undefined,
+        resolver_lat: resolverLat,
+        resolver_lon: resolverLon,
+        action_taken: actionTaken,
+      });
+      setComplaint(updated);
+      setIsResolveModalOpen(false);
+      setActionSuccess("Grievance officially RESOLVED with field verification and audit trail.");
+      setTimeout(() => setActionSuccess(null), 4000);
+    } catch (e: any) {
+      alert(`Resolution failed: ${e.message}`);
+    } finally {
+      setIsResolving(false);
+    }
+  };
 
   const handleReviewAction = async (action: "APPROVE" | "REJECT" | "REASSIGN") => {
     try {
@@ -180,6 +255,47 @@ export default function ComplaintDetailPage() {
               <CheckCircle size={14} /> {actionSuccess}
             </span>
           )}
+
+          {/* Status lifecycle selector */}
+          <select
+            value={complaint.status}
+            onChange={(e) => handleStatusChange(e.target.value)}
+            style={{
+              padding: "5px 10px",
+              borderRadius: 6,
+              fontSize: 12,
+              background: "var(--brand-surface)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--brand-border)",
+            }}
+          >
+            <option value="submitted">Submitted</option>
+            <option value="in_progress">In Progress</option>
+            <option value="field_verification">Field Verification</option>
+            <option value="resolved">Resolved</option>
+            <option value="closed">Closed</option>
+            <option value="reopened">Reopened</option>
+          </select>
+
+          {complaint.status !== "resolved" && (
+            <button
+              onClick={() => setIsResolveModalOpen(true)}
+              className="btn"
+              style={{
+                fontSize: 12,
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                background: "linear-gradient(135deg, #10b981, #059669)",
+                color: "#ffffff",
+                border: "none",
+                fontWeight: 600,
+              }}
+            >
+              <CheckCircle size={13} /> Resolve Complaint
+            </button>
+          )}
+
           <button
             onClick={() => setIsOverrideModalOpen(true)}
             className="btn btn-secondary"
@@ -187,18 +303,6 @@ export default function ComplaintDetailPage() {
           >
             <Edit3 size={13} /> Officer Override
           </button>
-          <span
-            style={{
-              padding: "5px 12px",
-              borderRadius: 6,
-              fontSize: 12,
-              background: "rgba(99,102,241,0.1)",
-              color: "var(--accent-indigo)",
-              border: "1px solid rgba(99,102,241,0.2)",
-            }}
-          >
-            {STATUSES[complaint.status as keyof typeof STATUSES]?.label || complaint.status}
-          </span>
         </div>
       </div>
 
@@ -663,6 +767,185 @@ export default function ComplaintDetailPage() {
                 </button>
                 <button type="submit" className="btn btn-primary" style={{ fontSize: 13 }}>
                   Save Override & Reassign
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* RESOLUTION MODAL */}
+      {isResolveModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            padding: 16,
+          }}
+        >
+          <div
+            className="card"
+            style={{
+              maxWidth: 540,
+              width: "100%",
+              background: "#0f172a",
+              border: "1px solid #1e293b",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+              padding: 24,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <CheckCircle size={18} color="#10b981" />
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "#f8fafc" }}>
+                  Record Official Resolution & Sign-Off
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsResolveModalOpen(false)}
+                style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleResolveSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>
+                  RESOLVING OFFICER / AUTHORITY
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={resolvedBy}
+                  onChange={(e) => setResolvedBy(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: "var(--brand-surface)",
+                    border: "1px solid var(--brand-border)",
+                    borderRadius: 6,
+                    color: "var(--text-primary)",
+                    fontSize: 13,
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>
+                  ACTION TAKEN CLASSIFICATION
+                </label>
+                <input
+                  type="text"
+                  value={actionTaken}
+                  onChange={(e) => setActionTaken(e.target.value)}
+                  placeholder="e.g. Debris cleared, pipe patched, storm drain unclogged"
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: "var(--brand-surface)",
+                    border: "1px solid var(--brand-border)",
+                    borderRadius: 6,
+                    color: "var(--text-primary)",
+                    fontSize: 13,
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>
+                  RESOLUTION NOTE & WORK REPORT (REQUIRED)
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={resolutionNote}
+                  onChange={(e) => setResolutionNote(e.target.value)}
+                  placeholder="Describe the exact maintenance or repair steps performed to resolve this grievance..."
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: "var(--brand-surface)",
+                    border: "1px solid var(--brand-border)",
+                    borderRadius: 6,
+                    color: "var(--text-primary)",
+                    fontSize: 13,
+                    resize: "none",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>
+                  RESOLUTION EVIDENCE PHOTO URL (OPTIONAL)
+                </label>
+                <input
+                  type="text"
+                  value={proofImageUrl}
+                  onChange={(e) => setProofImageUrl(e.target.value)}
+                  placeholder="https://... or uploaded evidence photo path"
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: "var(--brand-surface)",
+                    border: "1px solid var(--brand-border)",
+                    borderRadius: 6,
+                    color: "var(--text-primary)",
+                    fontSize: 13,
+                  }}
+                />
+              </div>
+
+              <div style={{ padding: "10px 12px", background: "rgba(15, 23, 42, 0.6)", borderRadius: 8, border: "1px solid #334155" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", display: "block" }}>
+                      GEOFENCE VERIFICATION
+                    </span>
+                    <span style={{ fontSize: 12, color: resolverLat ? "#22d3ee" : "#64748b" }}>
+                      {resolverLat ? `${resolverLat.toFixed(4)}, ${resolverLon?.toFixed(4)}` : "No GPS attached"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={captureGPS}
+                    disabled={gpsCapturing}
+                    className="btn btn-secondary"
+                    style={{ fontSize: 11, padding: "4px 8px" }}
+                  >
+                    {gpsCapturing ? "Locating..." : "📍 Capture My GPS"}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setIsResolveModalOpen(false)}
+                  className="btn btn-ghost"
+                  style={{ fontSize: 13 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResolving}
+                  className="btn"
+                  style={{
+                    fontSize: 13,
+                    background: "linear-gradient(135deg, #10b981, #059669)",
+                    color: "#ffffff",
+                    border: "none",
+                    fontWeight: 600,
+                  }}
+                >
+                  {isResolving ? "Verifying & Resolving..." : "Confirm Resolution"}
                 </button>
               </div>
             </form>

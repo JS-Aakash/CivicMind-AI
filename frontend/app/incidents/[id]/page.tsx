@@ -21,7 +21,7 @@ import {
   ChevronRight,
   Flame,
 } from "lucide-react";
-import { getIncident, updateIncidentStatus } from "@/lib/api";
+import { getIncident, updateIncidentStatus, resolveIncident } from "@/lib/api";
 import type { Incident, MapMarker, MapIncidentMarker } from "@/lib/types";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { LanguageBadge } from "@/components/LanguageBadge";
@@ -37,9 +37,25 @@ export default function IncidentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [statusUpdating, setStatusUpdating] = useState(false);
 
+  // Resolution modal state
+  const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
+  const [resolutionNote, setResolutionNote] = useState("");
+  const [resolvedBy, setResolvedBy] = useState("Officer J. Sharma (Incident Commander)");
+  const [proofImageUrl, setProofImageUrl] = useState("");
+  const [actionTaken, setActionTaken] = useState("Cluster incident resolved and all member sites restored");
+  const [resolverLat, setResolverLat] = useState<number | undefined>(undefined);
+  const [resolverLon, setResolverLon] = useState<number | undefined>(undefined);
+  const [gpsCapturing, setGpsCapturing] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
   const fetchDetail = () => {
     getIncident(id)
-      .then(setIncident)
+      .then((inc) => {
+        setIncident(inc);
+        if (inc.center_latitude) setResolverLat(inc.center_latitude);
+        if (inc.center_longitude) setResolverLon(inc.center_longitude);
+      })
       .catch(() => setIncident(null))
       .finally(() => setLoading(false));
   };
@@ -47,6 +63,26 @@ export default function IncidentDetailPage() {
   useEffect(() => {
     fetchDetail();
   }, [id]);
+
+  const captureGPS = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+    setGpsCapturing(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setResolverLat(pos.coords.latitude);
+        setResolverLon(pos.coords.longitude);
+        setGpsCapturing(false);
+      },
+      (err) => {
+        alert("GPS capture failed: " + err.message);
+        setGpsCapturing(false);
+      },
+      { enableHighAccuracy: true, timeout: 5000 }
+    );
+  };
 
   const handleStatusChange = async (newStatus: string) => {
     if (!incident) return;
@@ -58,6 +94,33 @@ export default function IncidentDetailPage() {
       alert(`Status update failed: ${e.message}`);
     } finally {
       setStatusUpdating(false);
+    }
+  };
+
+  const handleResolveSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resolutionNote.trim()) {
+      alert("Please provide a resolution note.");
+      return;
+    }
+    setIsResolving(true);
+    try {
+      const res = await resolveIncident(id, {
+        resolution_note: resolutionNote,
+        resolved_by: resolvedBy,
+        proof_image_url: proofImageUrl || undefined,
+        resolver_lat: resolverLat,
+        resolver_lon: resolverLon,
+        action_taken: actionTaken,
+      });
+      setIsResolveModalOpen(false);
+      setActionSuccess(`Incident Resolved! ${res.resolved_complaints_count} linked complaints automatically resolved.`);
+      fetchDetail();
+      setTimeout(() => setActionSuccess(null), 5000);
+    } catch (e: any) {
+      alert(`Incident resolution failed: ${e.message}`);
+    } finally {
+      setIsResolving(false);
     }
   };
 
@@ -168,6 +231,31 @@ export default function IncidentDetailPage() {
         </div>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {actionSuccess && (
+            <span style={{ color: "#22c55e", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
+              <CheckCircle2 size={14} /> {actionSuccess}
+            </span>
+          )}
+
+          {incident.status !== "resolved" && (
+            <button
+              onClick={() => setIsResolveModalOpen(true)}
+              className="btn"
+              style={{
+                fontSize: 12,
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                background: "linear-gradient(135deg, #10b981, #059669)",
+                color: "#ffffff",
+                border: "none",
+                fontWeight: 600,
+              }}
+            >
+              <CheckCircle2 size={13} /> Resolve Incident
+            </button>
+          )}
+
           <select
             value={incident.status}
             onChange={(e) => handleStatusChange(e.target.value)}
@@ -451,6 +539,189 @@ export default function IncidentDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* INCIDENT RESOLUTION MODAL */}
+      {isResolveModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            padding: 16,
+          }}
+        >
+          <div
+            className="card"
+            style={{
+              maxWidth: 540,
+              width: "100%",
+              background: "#0f172a",
+              border: "1px solid #1e293b",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+              padding: 24,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <CheckCircle2 size={18} color="#10b981" />
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "#f8fafc" }}>
+                  Resolve Incident & Cascade to Linked Complaints
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsResolveModalOpen(false)}
+                style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p style={{ fontSize: 12, color: "#94a3b8", marginBottom: 14 }}>
+              Resolving this incident will automatically resolve all {incident.complaint_count || (incident.member_complaints?.length || 0)} linked grievances and generate individual verification audit records.
+            </p>
+
+            <form onSubmit={handleResolveSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>
+                  INCIDENT COMMANDER / RESOLVING OFFICER
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={resolvedBy}
+                  onChange={(e) => setResolvedBy(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: "var(--brand-surface)",
+                    border: "1px solid var(--brand-border)",
+                    borderRadius: 6,
+                    color: "var(--text-primary)",
+                    fontSize: 13,
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>
+                  ACTION TAKEN CLASSIFICATION
+                </label>
+                <input
+                  type="text"
+                  value={actionTaken}
+                  onChange={(e) => setActionTaken(e.target.value)}
+                  placeholder="e.g. Cluster area cleared, main pipeline valve replaced"
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: "var(--brand-surface)",
+                    border: "1px solid var(--brand-border)",
+                    borderRadius: 6,
+                    color: "var(--text-primary)",
+                    fontSize: 13,
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>
+                  RESOLUTION NOTE (REQUIRED)
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={resolutionNote}
+                  onChange={(e) => setResolutionNote(e.target.value)}
+                  placeholder="Describe root-cause mitigation and overall area repair work..."
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: "var(--brand-surface)",
+                    border: "1px solid var(--brand-border)",
+                    borderRadius: 6,
+                    color: "var(--text-primary)",
+                    fontSize: 13,
+                    resize: "none",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>
+                  FIELD RESOLUTION PHOTO URL (OPTIONAL)
+                </label>
+                <input
+                  type="text"
+                  value={proofImageUrl}
+                  onChange={(e) => setProofImageUrl(e.target.value)}
+                  placeholder="https://... or uploaded photo path"
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: "var(--brand-surface)",
+                    border: "1px solid var(--brand-border)",
+                    borderRadius: 6,
+                    color: "var(--text-primary)",
+                    fontSize: 13,
+                  }}
+                />
+              </div>
+
+              <div style={{ padding: "10px 12px", background: "rgba(15, 23, 42, 0.6)", borderRadius: 8, border: "1px solid #334155" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", display: "block" }}>
+                      GEOFENCE VERIFICATION
+                    </span>
+                    <span style={{ fontSize: 12, color: resolverLat ? "#22d3ee" : "#64748b" }}>
+                      {resolverLat ? `${resolverLat.toFixed(4)}, ${resolverLon?.toFixed(4)}` : "No GPS attached"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={captureGPS}
+                    disabled={gpsCapturing}
+                    className="btn btn-secondary"
+                    style={{ fontSize: 11, padding: "4px 8px" }}
+                  >
+                    {gpsCapturing ? "Locating..." : "📍 Capture My GPS"}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setIsResolveModalOpen(false)}
+                  className="btn btn-ghost"
+                  style={{ fontSize: 13 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResolving}
+                  className="btn"
+                  style={{
+                    fontSize: 13,
+                    background: "linear-gradient(135deg, #10b981, #059669)",
+                    color: "#ffffff",
+                    border: "none",
+                    fontWeight: 600,
+                  }}
+                >
+                  {isResolving ? "Cascading Resolution..." : "Confirm & Resolve All"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

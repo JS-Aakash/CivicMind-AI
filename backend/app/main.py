@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.logging import setup_logging
-from app.api.routes import health, models, language, ai, grievances, incidents, map_routes, routing_routes, media_routes, command_center
+from app.api.routes import health, models, language, ai, grievances, incidents, map_routes, routing_routes, media_routes, command_center, auth_routes
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -98,6 +98,7 @@ app.include_router(incidents.router, prefix="/api", tags=["Incidents"])
 app.include_router(map_routes.router, prefix="/api", tags=["Map"])
 app.include_router(routing_routes.router, prefix="/api", tags=["Routing & SLA"])
 app.include_router(media_routes.router, prefix="/api", tags=["Media & Multimodal"])
+app.include_router(auth_routes.router, prefix="/api", tags=["Authentication"])
 app.include_router(command_center.router, tags=["Command Center & Analytics"])
 
 

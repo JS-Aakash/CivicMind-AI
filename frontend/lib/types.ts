@@ -1,7 +1,21 @@
 // CivicMind AI — All TypeScript Types (Module 3 Enhanced)
 
 export type Priority = "critical" | "high" | "medium" | "low";
-export type Status = "pending" | "open" | "in_progress" | "resolved" | "closed" | "duplicate";
+export type Status =
+  | "submitted"
+  | "ai_analysis"
+  | "triaged"
+  | "routed"
+  | "assigned"
+  | "in_progress"
+  | "field_verification"
+  | "resolved"
+  | "closed"
+  | "reopened"
+  | "pending"
+  | "open"
+  | "duplicate"
+  | (string & {});
 export type Script = "native" | "roman" | "mixed";
 export type IncidentStatus = "open" | "in_progress" | "resolved" | "closed";
 export type RoutingDecision = "AUTO_ROUTE" | "OFFICER_REVIEW" | "MANUAL_REVIEW";
@@ -131,6 +145,11 @@ export interface Complaint {
   voice_transcription?: VoiceTranscriptionItem;
   vision_evidence?: VisionAnalysisItem;
   multimodal_consistency?: MultimodalEvidenceSummary;
+  assigned_officer?: string;
+  resolution_info?: Record<string, any>;
+  resolved_at?: string;
+  reopen_eligible?: boolean;
+  reopen_reason?: string;
 }
 
 export interface ComplaintListResponse {
@@ -497,6 +516,13 @@ export interface CitizenTrackingResponse {
     ta: string;
     hi: string;
   };
+  assigned_officer?: string;
+  resolution_info?: Record<string, any>;
+  resolved_at?: string;
+  reopen_eligible?: boolean;
+  reopen_reason?: string;
+  lifecycle_stage?: string;
+  stages?: string[];
 }
 
 export interface MultimodalModelStatus {

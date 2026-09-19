@@ -19,6 +19,9 @@ from app.schemas.schemas import (
     MultimodalComplaintCreate,
     CitizenTrackingResponse,
     CitizenStatusTimelineEvent,
+    StatusUpdateRequest,
+    ComplaintResolveRequest,
+    ComplaintReopenRequest,
 )
 from app.services.duplicate_service import duplicate_detection_service
 from app.services.incident_service import incident_service
@@ -273,12 +276,82 @@ def _to_response(c: dict) -> ComplaintResponse:
         ai_explanation=c.get("ai_explanation"),
         department_id=c.get("department_id"),
         department_name=c.get("department_name"),
+        secondary_departments=c.get("secondary_departments") or [],
+        routing_decision=c.get("routing_decision", "AUTO_ROUTE"),
+        requires_human_review=c.get("requires_human_review", False),
+        assigned_officer=c.get("assigned_officer"),
         incident_id=inc_id,
-        status=c.get("status", "open"),
+        status=c.get("status", "submitted"),
+        resolved_at=c.get("resolved_at"),
+        resolution_info=c.get("resolution_info"),
+        reopen_reason=c.get("reopen_reason"),
+        citizen_feedback=c.get("citizen_feedback"),
         is_demo=c.get("is_demo", True),
         created_at=created_ts,
         updated_at=created_ts,
+        media=c.get("media") or [],
+        voice_transcription=c.get("voice_transcription"),
+        vision_evidence=c.get("vision_evidence"),
+        multimodal_consistency=c.get("multimodal_consistency"),
     )
+
+
+@router.post("/grievances/{complaint_id}/status", response_model=ComplaintResponse)
+async def update_grievance_status(complaint_id: str, req: StatusUpdateRequest):
+    """
+    Transitions complaint across real 9-stage lifecycle:
+    SUBMITTED -> AI_ANALYSIS -> TRIAGED -> ROUTED -> ASSIGNED -> IN_PROGRESS -> FIELD_VERIFICATION -> RESOLVED -> CLOSED
+    """
+    _ensure_service_initialized()
+    try:
+        updated = incident_service.update_complaint_status(
+            complaint_id=complaint_id,
+            new_status=req.status,
+            notes=req.notes,
+            assigned_officer=req.assigned_officer,
+            department_name=req.department_name,
+        )
+        return _to_response(updated)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/grievances/{complaint_id}/resolve", response_model=ComplaintResponse)
+async def resolve_grievance(complaint_id: str, req: ComplaintResolveRequest):
+    """
+    Resolves single complaint with mandatory note, evidence, and optional geofence verification.
+    """
+    _ensure_service_initialized()
+    try:
+        updated = incident_service.resolve_complaint(
+            complaint_id=complaint_id,
+            resolution_note=req.resolution_note,
+            resolution_photo=req.resolution_photo,
+            resolver_id=req.resolver_id or "officer-01",
+            resolver_name=req.resolver_name or "Ward Inspection Officer",
+            resolver_lat=req.resolver_lat,
+            resolver_lng=req.resolver_lng,
+        )
+        return _to_response(updated)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/grievances/{complaint_id}/reopen", response_model=ComplaintResponse)
+async def reopen_grievance(complaint_id: str, req: ComplaintReopenRequest):
+    """
+    Citizen reopen request when unsatisfied with resolution.
+    """
+    _ensure_service_initialized()
+    try:
+        updated = incident_service.reopen_complaint(
+            complaint_id=complaint_id,
+            reason=req.reason,
+            citizen_feedback=req.citizen_feedback,
+        )
+        return _to_response(updated)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/grievances", response_model=ComplaintListResponse)
@@ -467,44 +540,68 @@ async def track_citizen_complaint(complaint_code: str):
         "hi": f"आपकी शिकायत सत्यापित कर {dept_hi} को भेज दी गई है। लक्षित समाधान समय: {sla_hours} घंटे के भीतर।",
     }
 
-    # Timeline construction
-    timeline = [
-        CitizenStatusTimelineEvent(
-            title="Complaint Lodged",
-            timestamp=created_ts,
-            description="Citizen submission received with evidence and location verification.",
-            status="completed",
-            actor="Citizen Portal",
-        ),
-        CitizenStatusTimelineEvent(
-            title="AI Intelligence & Multimodal Triaged",
-            timestamp=created_ts,
-            description=f"MuRIL v1.1 identified category as {str(target.get('category', 'General')).upper()} with {prio.upper()} priority.",
-            status="completed",
-            actor="CivicMind AI Engine",
-        ),
-        CitizenStatusTimelineEvent(
-            title=f"Dispatched to {dept_name}",
-            timestamp=created_ts,
-            description=f"Automated smart routing with {sla_hours}h SLA commitment.",
-            status="completed" if target.get("status") in ["in_progress", "resolved", "closed"] else "current",
-            actor="Smart Routing Dispatcher",
-        ),
-        CitizenStatusTimelineEvent(
-            title="Municipal Field Action & Inspection",
-            timestamp=created_ts,
-            description="Field maintenance crew assigned to inspect and resolve on-site.",
-            status="current" if target.get("status") == "in_progress" else ("completed" if target.get("status") in ["resolved", "closed"] else "upcoming"),
-            actor=dept_name,
-        ),
-        CitizenStatusTimelineEvent(
-            title="Resolution & Verification",
-            timestamp=created_ts,
-            description="Issue resolved and validated by citizen verification.",
-            status="completed" if target.get("status") in ["resolved", "closed"] else "upcoming",
-            actor="Ward Engineer",
-        ),
+    cur_status = str(target.get("status", "submitted")).lower()
+
+    # Define 9-stage real lifecycle progression
+    stage_defs = [
+        ("submitted", "Complaint Lodged", "Citizen submission recorded with geotag and timestamped authentication.", "Citizen Portal"),
+        ("ai_analysis", "AI Multimodal Understanding", "MuRIL multilingual neural model & Qwen2.5-VL processed evidence signals.", "CivicMind AI Core"),
+        ("triaged", "Priority & Urgency Triaged", f"Triaged as {prio.upper()} priority with {sla_hours}h SLA commitment.", "Civic Decision Engine"),
+        ("routed", "Department Routing", f"Dispatched to {dept_name} queue.", "Smart Routing Dispatcher"),
+        ("assigned", "Officer Assignment", f"Assigned to {target.get('assigned_officer') or 'Field Operations Engineer'}.", dept_name),
+        ("in_progress", "Field Work In Progress", "Municipal maintenance crew deployed on-site for remediation.", dept_name),
+        ("field_verification", "Field Verification", "Physical inspection and pre-closure verification in progress.", "Field Inspector"),
+        ("resolved", "Resolution & Proof Submitted", target.get("resolution_info", {}).get("resolution_note") if target.get("resolution_info") else "Issue remediated on-site. Resolution evidence attached.", "Ward Engineer"),
+        ("closed", "Citizen Confirmation & Closed", "Citizen verified resolution. Grievance closed.", "Citizen Grievance Cell"),
     ]
+
+    # Map status to stage index
+    status_order = {
+        "submitted": 0,
+        "ai_analysis": 1,
+        "triaged": 2,
+        "routed": 3,
+        "assigned": 4,
+        "in_progress": 5,
+        "field_verification": 6,
+        "resolved": 7,
+        "closed": 8,
+        "reopened": 4,  # returns to assigned/review
+    }
+    cur_idx = status_order.get(cur_status, 0)
+    # If open, treat as routed/triaged (index 3)
+    if cur_status == "open":
+        cur_idx = 3
+
+    timeline = []
+    for idx, (code, title, desc, actor) in enumerate(stage_defs):
+        if idx < cur_idx:
+            st = "completed"
+        elif idx == cur_idx:
+            st = "current"
+        else:
+            st = "upcoming"
+
+        timeline.append(
+            CitizenStatusTimelineEvent(
+                title=title,
+                timestamp=created_ts,
+                description=desc,
+                status=st,
+                actor=actor,
+            )
+        )
+
+    if cur_status == "reopened":
+        timeline.append(
+            CitizenStatusTimelineEvent(
+                title="Grievance Reopened",
+                timestamp=datetime.now(timezone.utc),
+                description=f"Citizen indicated issue remains unresolved: {target.get('reopen_reason') or 'Under secondary review'}",
+                status="current",
+                actor="Citizen Feedback Loop",
+            )
+        )
 
     # Associated Incident
     assigned_inc_id = incident_service._complaint_to_incident.get(str(target["id"]))
@@ -520,9 +617,10 @@ async def track_citizen_complaint(complaint_code: str):
         category=target.get("category") or "general",
         category_display=str(target.get("category", "General")).title(),
         priority=prio,
-        status=target.get("status", "open"),
-        status_display=str(target.get("status", "open")).replace("_", " ").title(),
+        status=cur_status,
+        status_display=cur_status.replace("_", " ").title(),
         department_name=dept_name,
+        assigned_officer=target.get("assigned_officer"),
         expected_sla_hours=sla_hours,
         sla_due_at=created_ts,
         timeline=timeline,
@@ -530,6 +628,10 @@ async def track_citizen_complaint(complaint_code: str):
         ai_summary=target.get("ai_explanation") or "Grievance validated and routed to municipal authority.",
         incident_title=inc_title,
         citizen_response_message=response_messages,
+        resolved_at=target.get("resolved_at"),
+        resolution_info=target.get("resolution_info"),
+        reopen_eligible=cur_status in ["resolved", "closed"],
+        reopen_reason=target.get("reopen_reason"),
     )
 
 
