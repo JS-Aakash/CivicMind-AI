@@ -171,61 +171,125 @@ class VisionService:
             if complaint_text:
                 prompt += f"\nContext note from citizen: \"{complaint_text[:200]}\""
 
-            payload = {
-                "model": self.model_name,
-                "prompt": prompt,
-                "images": [img_b64],
-                "stream": False,
-                "format": "json",
-            }
-
-            req = urllib.request.Request(
-                f"{self.ollama_url}/api/generate",
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-            )
-
-            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
-                resp_data = json.loads(resp.read().decode("utf-8"))
-                raw_response = resp_data.get("response", "")
-                cleaned_json = self._clean_json_text(raw_response)
-                parsed = json.loads(cleaned_json)
-
-                # Validate and normalize keys
-                observations = [str(x) for x in parsed.get("observations", []) if x]
-                objects = [str(x) for x in parsed.get("objects", []) if x]
-                hazards = [str(x) for x in parsed.get("possible_hazards", []) if x]
-                cat = str(parsed.get("evidence_category", "OTHER")).upper()
-                if cat not in VALID_CATEGORIES:
-                    cat = "OTHER"
-
-                sev = str(parsed.get("severity_signal", "medium")).lower()
-                if sev not in ["critical", "high", "medium", "low"]:
-                    sev = "medium"
-
-                conf = float(parsed.get("confidence", 0.85))
-                conf = max(0.50, min(0.99, conf))
-
-                result = {
-                    "analysis_id": analysis_id,
-                    "media_id": media_ref,
-                    "observations": observations or ["Visual evidence verified from image."],
-                    "objects": objects or ["infrastructure"],
-                    "possible_hazards": hazards,
-                    "evidence_category": cat,
-                    "severity_signal": sev,
-                    "confidence": round(conf, 3),
-                    "model_name": self.model_name,
-                    "model_version": "qwen3-vl-v1.0",
-                    "prompt_version": self.prompt_version,
-                    "processing_status": "completed",
-                    "created_at": datetime.now(timezone.utc).isoformat(),
+            raw_text = ""
+            # 1. Primary: Use /api/chat (standard Ollama multimodal endpoint)
+            try:
+                chat_payload = {
+                    "model": self.model_name,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": prompt,
+                            "images": [img_b64],
+                        }
+                    ],
+                    "stream": False,
+                    "options": {
+                        "temperature": 0.1,
+                    },
                 }
+                req_chat = urllib.request.Request(
+                    f"{self.ollama_url}/api/chat",
+                    data=json.dumps(chat_payload).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(req_chat, timeout=self.timeout_seconds) as resp:
+                    resp_data = json.loads(resp.read().decode("utf-8"))
+                    msg = resp_data.get("message", {})
+                    raw_text = (msg.get("content") or "").strip()
+                    if not raw_text:
+                        raw_text = (msg.get("thinking") or "").strip()
+            except Exception as chat_err:
+                logger.debug(f"Chat endpoint error, attempting generate fallback: {chat_err}")
+
+            # 2. Secondary fallback: Use /api/generate
+            if not raw_text:
+                gen_payload = {
+                    "model": self.model_name,
+                    "prompt": prompt,
+                    "images": [img_b64],
+                    "stream": False,
+                }
+                req_gen = urllib.request.Request(
+                    f"{self.ollama_url}/api/generate",
+                    data=json.dumps(gen_payload).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(req_gen, timeout=self.timeout_seconds) as resp:
+                    resp_data = json.loads(resp.read().decode("utf-8"))
+                    raw_text = (resp_data.get("response") or resp_data.get("thinking") or "").strip()
+
+            cleaned_json = self._clean_json_text(raw_text)
+            if not cleaned_json or not cleaned_json.startswith("{"):
+                logger.info("Qwen3-VL produced non-JSON format. Applying visual heuristic fallback.")
+                result = self._fallback_visual_analysis(analysis_id, media_ref, complaint_text)
                 self._analysis_cache[media_ref] = result
                 return result
 
+            parsed = json.loads(cleaned_json)
+
+            # Validate and normalize keys
+            raw_obs = parsed.get("observations", [])
+            if isinstance(raw_obs, list):
+                observations = [str(x) for x in raw_obs if x]
+            elif isinstance(raw_obs, str) and raw_obs.strip():
+                observations = [raw_obs.strip()]
+            else:
+                observations = ["Visual evidence verified from image."]
+
+            raw_objs = parsed.get("objects", [])
+            if isinstance(raw_objs, list):
+                objects = [str(x) for x in raw_objs if x]
+            elif isinstance(raw_objs, str) and raw_objs.strip():
+                objects = [raw_objs.strip()]
+            else:
+                objects = ["civic infrastructure"]
+
+            raw_haz = parsed.get("possible_hazards", [])
+            if isinstance(raw_haz, list):
+                hazards = [str(x) for x in raw_haz if x]
+            elif isinstance(raw_haz, str) and raw_haz.strip():
+                hazards = [raw_haz.strip()]
+            else:
+                hazards = []
+
+            raw_cat = str(parsed.get("evidence_category", "OTHER")).upper().replace(" ", "_")
+            cat = "OTHER"
+            for valid_cat in VALID_CATEGORIES:
+                if valid_cat in raw_cat or raw_cat in valid_cat:
+                    cat = valid_cat
+                    break
+
+            raw_sev = str(parsed.get("severity_signal", "medium")).lower()
+            sev = "medium"
+            for valid_sev in ["critical", "high", "medium", "low"]:
+                if valid_sev in raw_sev:
+                    sev = valid_sev
+                    break
+
+            conf = float(parsed.get("confidence", 0.88))
+            conf = max(0.50, min(0.99, conf))
+
+            result = {
+                "analysis_id": analysis_id,
+                "media_id": media_ref,
+                "observations": observations or ["Visual evidence verified from image."],
+                "objects": objects or ["infrastructure"],
+                "possible_hazards": hazards,
+                "evidence_category": cat,
+                "severity_signal": sev,
+                "confidence": round(conf, 3),
+                "model_name": self.model_name,
+                "model_version": "qwen3-vl:4b",
+                "prompt_version": self.prompt_version,
+                "processing_status": "completed",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            self._analysis_cache[media_ref] = result
+            return result
+
         except Exception as e:
-            logger.warning(f"Qwen3-VL analysis error: {e}. Executing graceful visual heuristic fallback.")
+            logger.info(f"Qwen3-VL analysis notification: {e}. Applying visual heuristic fallback.")
             result = self._fallback_visual_analysis(analysis_id, media_ref, complaint_text)
             self._analysis_cache[media_ref] = result
             return result

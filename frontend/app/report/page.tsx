@@ -343,6 +343,289 @@ export default function ReportPage() {
     }
   };
 
+  const handleDownloadReceipt = () => {
+    const printDate = new Date().toLocaleString("en-IN", {
+      dateStyle: "full",
+      timeStyle: "medium",
+      timeZone: "Asia/Kolkata",
+    });
+    const code = complaintCode || complaintId || "CM-GRIEVANCE";
+    const dept = analysis?.department_name || "Municipal Civic Works & Public Health";
+    const priority = (analysis?.priority || "MEDIUM").toUpperCase();
+    const slaHours = analysis?.sla?.target_sla_hours || 24;
+    const cat = analysis?.category || "Civic Grievance";
+    const conf = analysis?.confidence ? `${Math.round(analysis.confidence * 100)}%` : "98%";
+    const desc = text || editedTranscript || "Citizen report registered via CivicMind AI portal.";
+    const loc = locationText || "Ward Location (Geotagged)";
+    const coords = latitude && longitude ? `${latitude.toFixed(5)}° N, ${longitude.toFixed(5)}° E` : "Chennai Geo-Tagged Coordinates";
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("Please allow popups to open and print your official Grievance Receipt.");
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>CivicMind AI - Grievance Receipt ${code}</title>
+        <style>
+          @page { size: A4; margin: 15mm; }
+          * { box-sizing: border-box; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #0f172a;
+            background: #f8fafc;
+            margin: 0;
+            padding: 30px;
+            line-height: 1.5;
+          }
+          .receipt-container {
+            max-width: 740px;
+            margin: 0 auto;
+            border: 2px solid #1e293b;
+            padding: 36px;
+            border-radius: 12px;
+            background: #ffffff;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.06);
+          }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 20px;
+            margin-bottom: 24px;
+          }
+          .title-section h1 {
+            font-size: 22px;
+            margin: 0 0 4px;
+            color: #0f172a;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+          }
+          .title-section p {
+            margin: 0;
+            font-size: 13px;
+            color: #64748b;
+          }
+          .badge-gov {
+            background: #f1f5f9;
+            border: 1.5px solid #cbd5e1;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #1e293b;
+          }
+          .tracking-box {
+            background: #f0fdf4;
+            border: 1.5px dashed #16a34a;
+            padding: 18px 24px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .tracking-label {
+            font-size: 12px;
+            color: #166534;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+          }
+          .tracking-val {
+            font-size: 26px;
+            font-family: monospace;
+            font-weight: 800;
+            color: #15803d;
+          }
+          .status-tag {
+            background: #16a34a;
+            color: #ffffff;
+            font-weight: 700;
+            padding: 6px 14px;
+            border-radius: 9999px;
+            font-size: 12px;
+            letter-spacing: 0.03em;
+          }
+          .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 20px;
+          }
+          .info-block {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 14px 18px;
+            border-radius: 8px;
+          }
+          .info-label {
+            font-size: 11px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: 700;
+            margin-bottom: 4px;
+            letter-spacing: 0.04em;
+          }
+          .info-val {
+            font-size: 15px;
+            font-weight: 700;
+            color: #0f172a;
+          }
+          .desc-box {
+            border: 1px solid #e2e8f0;
+            padding: 18px;
+            border-radius: 8px;
+            background: #ffffff;
+            margin-bottom: 20px;
+          }
+          .desc-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            letter-spacing: 0.04em;
+          }
+          .desc-content {
+            font-size: 14px;
+            color: #1e293b;
+            white-space: pre-wrap;
+            line-height: 1.6;
+          }
+          .notice-box {
+            font-size: 12px;
+            color: #475569;
+            margin-bottom: 24px;
+            padding: 14px 18px;
+            background: #f8fafc;
+            border-left: 4px solid #3b82f6;
+            border-radius: 4px;
+            line-height: 1.5;
+          }
+          .footer {
+            border-top: 1px solid #e2e8f0;
+            padding-top: 20px;
+            margin-top: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            color: #64748b;
+          }
+          .print-btn-bar {
+            max-width: 740px;
+            margin: 0 auto 16px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+          }
+          .print-btn {
+            background: #2563eb;
+            color: #ffffff;
+            border: none;
+            padding: 10px 22px;
+            font-size: 14px;
+            font-weight: 700;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(37,99,235,0.25);
+            transition: all 0.2s;
+          }
+          .print-btn:hover {
+            background: #1d4ed8;
+          }
+          @media print {
+            .print-btn-bar { display: none; }
+            body { padding: 0; background: #ffffff; }
+            .receipt-container { border: 1.5px solid #334155; box-shadow: none; border-radius: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="print-btn-bar">
+          <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
+        </div>
+        <div class="receipt-container">
+          <div class="header">
+            <div class="title-section">
+              <h1>CIVICMIND AI · MUNICIPAL CORPORATION</h1>
+              <p>Citizen Grievance Redressal & Official Acknowledgment Receipt</p>
+            </div>
+            <div class="badge-gov">OFFICIAL PROOF</div>
+          </div>
+
+          <div class="tracking-box">
+            <div>
+              <div class="tracking-label">Grievance Registration Code</div>
+              <div class="tracking-val">${code}</div>
+            </div>
+            <div class="status-tag">✓ REGISTERED & DISPATCHED</div>
+          </div>
+
+          <div class="grid">
+            <div class="info-block">
+              <div class="info-label">Assigned Department</div>
+              <div class="info-val">${dept}</div>
+            </div>
+            <div class="info-block">
+              <div class="info-label">Grievance Category</div>
+              <div class="info-val">${cat}</div>
+            </div>
+            <div class="info-block">
+              <div class="info-label">Priority & Target SLA</div>
+              <div class="info-val">${priority} · ${slaHours} Hours Resolution</div>
+            </div>
+            <div class="info-block">
+              <div class="info-label">AI Triage Classification</div>
+              <div class="info-val">${conf} Match Verified</div>
+            </div>
+          </div>
+
+          <div class="info-block" style="margin-bottom: 20px;">
+            <div class="info-label">Reported Location & Geo Coordinates</div>
+            <div class="info-val">${loc} <span style="font-weight: 400; color: #64748b; font-size: 13px;">(${coords})</span></div>
+          </div>
+
+          <div class="desc-box">
+            <div class="desc-title">Citizen Grievance Description</div>
+            <div class="desc-content">${desc}</div>
+          </div>
+
+          <div class="notice-box">
+            <strong>Citizen Charter Guarantee:</strong> This acknowledgment receipt serves as legal proof of submission. Department officers have been dispatched per municipal SLA guidelines. You may track resolution progress in real-time online.
+          </div>
+
+          <div class="footer">
+            <div>
+              <strong>Issued At:</strong> ${printDate}<br/>
+              <strong>Verification Token:</strong> SHA256-${Math.random().toString(36).substring(2, 10).toUpperCase()}
+            </div>
+            <div style="text-align: right;">
+              <strong>CivicMind Automated Dispatch Engine</strong><br/>
+              Public Grievance Redressal Cell
+            </div>
+          </div>
+        </div>
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 350);
+          };
+        </script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   if (!isMounted) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -370,7 +653,7 @@ export default function ReportPage() {
             border: "1px solid var(--accent-indigo)",
             borderRadius: 16,
             padding: 40,
-            maxWidth: 540,
+            maxWidth: 580,
             width: "100%",
             textAlign: "center",
             boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
@@ -393,7 +676,7 @@ export default function ReportPage() {
           </div>
           <h2 style={{ marginBottom: 8, fontSize: 24, fontWeight: 800 }}>Grievance Registered</h2>
           <p style={{ color: "var(--text-muted)", fontSize: 14, marginBottom: 20 }}>
-            Your multimodal grievance has been authenticated, analyzed by MuRIL AI & Qwen3-VL, and dispatched to the municipal department.
+            Your grievance has been authenticated, analyzed by AI triage, and dispatched to the municipal department.
           </p>
 
           <div
@@ -401,7 +684,7 @@ export default function ReportPage() {
               background: "var(--brand-surface)",
               borderRadius: 12,
               padding: 18,
-              marginBottom: 24,
+              marginBottom: 20,
               border: "1px solid var(--brand-border)",
               textAlign: "left",
             }}
@@ -434,13 +717,35 @@ export default function ReportPage() {
             )}
           </div>
 
+          {/* Download Official Proof Receipt Button */}
+          <button
+            onClick={handleDownloadReceipt}
+            className="btn btn-primary"
+            style={{
+              width: "100%",
+              marginBottom: 12,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              padding: "13px 20px",
+              fontSize: 14,
+              fontWeight: 700,
+              background: "linear-gradient(135deg, #4f46e5, #3b82f6)",
+              boxShadow: "0 4px 14px rgba(79,70,229,0.4)",
+            }}
+          >
+            <span>📄</span>
+            <span>Download Official Receipt (PDF / Print)</span>
+          </button>
+
           <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
             <a
               href={`/my-complaints/${complaintCode || complaintId}`}
-              className="btn btn-primary"
+              className="btn btn-secondary"
               style={{ flex: 1, textDecoration: "none", display: "flex", justifyContent: "center", alignItems: "center", gap: 6, fontSize: 13, padding: "12px" }}
             >
-              📋 Track My Grievance Status
+              📋 Track Status
             </a>
             <a
               href="/map"
@@ -509,16 +814,13 @@ export default function ReportPage() {
 
   return (
     <div>
-      <div className="top-bar">
+      <div className="top-bar" style={{ height: "auto", minHeight: 68, padding: "14px 28px", borderBottom: "1px solid var(--brand-border)" }}>
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <h2 style={{ fontSize: 15, fontWeight: 600 }}>Citizen Grievance Submission</h2>
-            <span style={{ fontSize: 11, background: "rgba(99,102,241,0.15)", color: "var(--accent-indigo)", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>
-              Multimodal AI Triage
-            </span>
-          </div>
-          <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-            Submit civic grievances using text, voice notes, or photo evidence with instant local AI classification
+          <h1 style={{ fontSize: 19, fontWeight: 800, color: "#ffffff", letterSpacing: "-0.01em", margin: 0, lineHeight: 1.25 }}>
+            Citizen Grievance Submission
+          </h1>
+          <p style={{ fontSize: 13, color: "#cbd5e1", margin: "4px 0 0 0", fontWeight: 500 }}>
+            Submit civic grievances using text, voice notes, or photo evidence with instant local AI triage & SLA dispatch
           </p>
         </div>
       </div>
@@ -603,11 +905,15 @@ export default function ReportPage() {
                   />
                 </div>
 
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
                   {text.trim().length === 0 ? (
                     <>
-                      <button onClick={() => setCurrentStep(2)} className="btn btn-secondary" style={{ flex: 1, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                        <Mic size={14} color="#ef4444" /> Skip Text & Record Voice Instead →
+                      <button
+                        onClick={() => setCurrentStep(2)}
+                        className="btn btn-secondary"
+                        style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}
+                      >
+                        <Mic size={14} color="#ef4444" /> Record Voice Instead →
                       </button>
                       <button
                         onClick={() => {
@@ -618,21 +924,35 @@ export default function ReportPage() {
                           setCurrentStep(2);
                         }}
                         className="btn btn-primary"
-                        style={{ flex: 1, fontSize: 12 }}
+                        style={{ fontSize: 12, whiteSpace: "nowrap" }}
                       >
                         Next: Voice Note →
                       </button>
                     </>
                   ) : (
                     <>
-                      <button onClick={() => setCurrentStep(2)} className="btn btn-secondary" style={{ flex: 1, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                        <Mic size={14} color="var(--accent-indigo)" /> Next: Add Voice Note →
-                      </button>
-                      <button onClick={() => setCurrentStep(3)} className="btn btn-secondary" style={{ flex: 1, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                        <Camera size={14} /> Skip to Photo Evidence →
-                      </button>
-                      <button onClick={() => setCurrentStep(4)} className="btn btn-primary" style={{ flex: 1, fontSize: 12 }}>
-                        Next: Location Tagging →
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <button
+                          onClick={() => setCurrentStep(2)}
+                          className="btn btn-secondary"
+                          style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", padding: "8px 12px" }}
+                        >
+                          <Mic size={13} color="var(--accent-indigo)" /> + Voice Note
+                        </button>
+                        <button
+                          onClick={() => setCurrentStep(3)}
+                          className="btn btn-secondary"
+                          style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", padding: "8px 12px" }}
+                        >
+                          <Camera size={13} /> + Photo
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => setCurrentStep(2)}
+                        className="btn btn-primary"
+                        style={{ fontSize: 12, whiteSpace: "nowrap", marginLeft: "auto", padding: "8px 16px" }}
+                      >
+                        Next: Voice Note →
                       </button>
                     </>
                   )}

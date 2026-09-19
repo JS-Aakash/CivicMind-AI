@@ -212,22 +212,24 @@ async def create_grievance(request: MultimodalComplaintCreate):
 
     # 7. Save and run incremental incident clustering
     incident_service.seed_complaints([complaint_dict])
-    assigned_inc = incident_service.add_complaint_incremental(complaint_dict)
+    assigned_inc = incident_service.process_new_complaint_incremental(complaint_dict)
     if assigned_inc:
         complaint_dict["incident_id"] = assigned_inc.get("id")
 
     try:
         from app.api.routes.command_center import record_audit_event
+        cat_str = str(getattr(analysis, "category", "CIVIC")).upper()
+        prio_str = str(effective_priority).upper()
         record_audit_event(
             event_type="COMPLAINT_REGISTERED",
             target_type="complaint",
             target_id=complaint_dict["complaint_code"],
             actor="Citizen Intake",
-            summary=f"New grievance registered: {complaint_dict['complaint_code']} ({analysis.category.upper()} / {effective_priority.upper()})",
+            summary=f"New grievance registered: {complaint_dict['complaint_code']} ({cat_str} / {prio_str})",
             details={
-                "category": analysis.category,
+                "category": getattr(analysis, "category", "general"),
                 "priority": effective_priority,
-                "department_name": analysis.department_name,
+                "department_name": getattr(analysis, "department_name", "Municipal Operations Cell"),
                 "requires_review": requires_review,
             },
         )

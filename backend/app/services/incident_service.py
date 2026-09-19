@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 import json
 import os
+import numpy as np
 
 class IncidentService:
     """
@@ -346,6 +347,9 @@ class IncidentService:
 
         self.save_to_disk()
         return None
+
+    # Backward compatibility alias
+    add_complaint_incremental = process_new_complaint_incremental
 
     def merge_incidents(self, source_incident_id: str, target_incident_id: str, reason: str = "Manual merge") -> Dict[str, Any]:
         """
