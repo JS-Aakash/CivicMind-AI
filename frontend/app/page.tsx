@@ -164,27 +164,21 @@ export default function CitizenPortalPage() {
       </header>
 
       {/* ─── Hero Section ─── */}
-      <section className="relative overflow-hidden pt-12 sm:pt-16 pb-16 px-4 lg:px-8 border-b border-slate-800/70">
+      <section className="relative overflow-hidden pt-6 sm:pt-10 pb-12 px-4 lg:px-8 border-b border-slate-800/70">
         {/* Glow backdrop */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[450px] bg-gradient-to-b from-cyan-500/20 via-blue-600/10 to-transparent rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[400px] bg-gradient-to-b from-cyan-500/15 via-blue-600/5 to-transparent rounded-full blur-3xl pointer-events-none" />
 
         <div className="max-w-4xl mx-auto text-center relative z-10 flex flex-col items-center">
-          {/* Centered Top Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900 border border-cyan-500/40 text-xs font-semibold text-cyan-300 mb-6 shadow-md shadow-cyan-500/10">
-            <Sparkles size={14} className="text-cyan-400 animate-pulse" />
-            <span>AI-Driven Public Service & Multi-Department Grievance Intelligence</span>
-          </div>
-
-          {/* Centered Main Headline */}
-          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight sm:leading-tight mb-5 text-center">
+          {/* Main Headline (Clean Solid White, Positioned High) */}
+          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight sm:leading-tight mb-4 text-center">
             Every Civic Voice. <br />
-            <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-300 bg-clip-text text-transparent">
+            <span className="text-white">
               Understood. Prioritized. Resolved.
             </span>
           </h1>
 
           {/* Centered Subtitle */}
-          <p className="text-sm sm:text-base text-slate-200 max-w-2xl mx-auto leading-relaxed mb-10 text-center font-normal">
+          <p className="text-sm sm:text-base text-slate-200 max-w-2xl mx-auto leading-relaxed mb-8 text-center font-normal">
             Submit municipal issues in English, தமிழ், or हिंदी with voice notes, live camera photos, and GPS tagging.
             Our local AI classifies severity, routes tickets in seconds, and verifies field resolutions with geofenced proof.
           </p>

@@ -288,22 +288,46 @@ export default function ReportPage() {
     const file = e.target.files[0];
     await processImageFile(file);
   };
+  useEffect(() => {
+    if (isCameraOpen && streamRef.current && videoRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch((err) => console.warn("Auto-play prevented:", err));
+    }
+  }, [isCameraOpen]);
 
   const startCamera = async (mode: "environment" | "user" = facingMode) => {
     try {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
-      setIsCameraOpen(true);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: mode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+      } catch {
+        // Fallback for laptop webcams without facingMode support
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
       }
+
+      streamRef.current = stream;
+      setIsCameraOpen(true);
+
+      // Timeout backup ensures ref is mounted in DOM
+      setTimeout(() => {
+        if (videoRef.current && streamRef.current) {
+          videoRef.current.srcObject = streamRef.current;
+          videoRef.current.play().catch((err) => console.warn("Video play error:", err));
+        }
+      }, 50);
     } catch (err: any) {
       alert("Camera access was denied or is not supported by your browser: " + (err.message || err));
       setIsCameraOpen(false);
@@ -970,56 +994,39 @@ export default function ReportPage() {
                 </div>
 
                 <div style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
-                  {text.trim().length === 0 ? (
-                    <>
-                      <button
-                        onClick={() => setCurrentStep(2)}
-                        className="btn btn-secondary"
-                        style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}
-                      >
-                        <Mic size={14} color="#ef4444" /> Record Voice Instead →
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (!text.trim()) {
-                            alert("Please enter a description or click 'Record Voice Instead'.");
-                            return;
-                          }
-                          setCurrentStep(2);
-                        }}
-                        className="btn btn-primary"
-                        style={{ fontSize: 12, whiteSpace: "nowrap" }}
-                      >
-                        Next: Voice Note →
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <button
-                          onClick={() => setCurrentStep(2)}
-                          className="btn btn-secondary"
-                          style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", padding: "8px 12px" }}
-                        >
-                          <Mic size={13} color="var(--accent-indigo)" /> + Voice Note
-                        </button>
-                        <button
-                          onClick={() => setCurrentStep(3)}
-                          className="btn btn-secondary"
-                          style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", padding: "8px 12px" }}
-                        >
-                          <Camera size={13} /> + Photo
-                        </button>
-                      </div>
-                      <button
-                        onClick={() => setCurrentStep(2)}
-                        className="btn btn-primary"
-                        style={{ fontSize: 12, whiteSpace: "nowrap", marginLeft: "auto", padding: "8px 16px" }}
-                      >
-                        Next: Voice Note →
-                      </button>
-                    </>
-                  )}
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStep(2)}
+                      className="btn btn-secondary"
+                      style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}
+                    >
+                      <Mic size={14} color="#ef4444" /> {text.trim().length === 0 ? "Record Voice Note" : "+ Voice Note"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => startCamera("environment")}
+                      className="btn btn-secondary"
+                      style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", border: "1px solid var(--accent-indigo)" }}
+                    >
+                      <Camera size={14} color="var(--accent-indigo)" /> 📸 Open Webcam / Live Camera
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!text.trim() && !editedTranscript && images.length === 0) {
+                        alert("Please write a description, record a voice note, or take a photo.");
+                        return;
+                      }
+                      setCurrentStep(2);
+                    }}
+                    className="btn btn-primary"
+                    style={{ fontSize: 12, whiteSpace: "nowrap", marginLeft: "auto", padding: "8px 16px" }}
+                  >
+                    Next: Voice Note →
+                  </button>
                 </div>
               </div>
             )}
