@@ -79,13 +79,13 @@ VISION_TO_TEXT_CATEGORY_MAP = {
 
 class VisionService:
     """
-    Manages local Qwen3-VL 4B visual evidence extraction and multimodal consistency checks.
+    Manages local Qwen2.5-VL 7B visual evidence extraction and multimodal consistency checks.
     """
 
     def __init__(
         self,
         ollama_url: str = "http://localhost:11434",
-        model_name: str = "qwen3-vl:4b",
+        model_name: str = "qwen2.5vl:7b",
         timeout_seconds: int = 45,
     ):
         self.ollama_url = os.environ.get("OLLAMA_URL", ollama_url).rstrip("/")
@@ -96,7 +96,7 @@ class VisionService:
         self._analysis_cache: Dict[str, Dict[str, Any]] = {}
 
     def check_health(self) -> Dict[str, Any]:
-        """Checks if Ollama is reachable and Qwen3-VL is installed."""
+        """Checks if Ollama is reachable and Qwen2.5-VL is installed."""
         try:
             req = urllib.request.Request(f"{self.ollama_url}/api/tags")
             with urllib.request.urlopen(req, timeout=5) as resp:
@@ -121,10 +121,23 @@ class VisionService:
                 "local": True,
             }
 
-    def _encode_image(self, image_path: str) -> str:
-        """Reads image and returns base64 encoded string."""
-        with open(image_path, "rb") as img_file:
-            return base64.b64encode(img_file.read()).decode("utf-8")
+    def _encode_image(self, image_path: str, max_dimension: int = 768) -> str:
+        """Reads image, optimizes dimensions to fit vision token limits, and returns base64 encoded string."""
+        try:
+            from PIL import Image
+            import io
+            with Image.open(image_path) as img:
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                if img.width > max_dimension or img.height > max_dimension:
+                    img.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=85, optimize=True)
+                return base64.b64encode(buf.getvalue()).decode("utf-8")
+        except Exception as e:
+            logger.debug(f"Pillow optimization fallback: {e}")
+            with open(image_path, "rb") as img_file:
+                return base64.b64encode(img_file.read()).decode("utf-8")
 
     def _clean_json_text(self, text: str) -> str:
         """Extracts JSON substring from LLM response."""
@@ -152,7 +165,7 @@ class VisionService:
         complaint_text: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Runs local Qwen3-VL 4B analysis on the image.
+        Runs local Qwen2.5-VL 7B analysis on the image.
         Returns validated structured visual evidence dictionary.
         """
         if media_id and media_id in self._analysis_cache:
@@ -172,7 +185,7 @@ class VisionService:
                 prompt += f"\nContext note from citizen: \"{complaint_text[:200]}\""
 
             raw_text = ""
-            # 1. Primary: Use /api/chat (standard Ollama multimodal endpoint)
+            # 1. Primary: Use /api/chat (standard Ollama multimodal endpoint with format: json)
             try:
                 chat_payload = {
                     "model": self.model_name,
@@ -184,6 +197,7 @@ class VisionService:
                         }
                     ],
                     "stream": False,
+                    "format": "json",
                     "options": {
                         "temperature": 0.1,
                     },
@@ -204,20 +218,27 @@ class VisionService:
 
             # 2. Secondary fallback: Use /api/generate
             if not raw_text:
-                gen_payload = {
-                    "model": self.model_name,
-                    "prompt": prompt,
-                    "images": [img_b64],
-                    "stream": False,
-                }
-                req_gen = urllib.request.Request(
-                    f"{self.ollama_url}/api/generate",
-                    data=json.dumps(gen_payload).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
-                )
-                with urllib.request.urlopen(req_gen, timeout=self.timeout_seconds) as resp:
-                    resp_data = json.loads(resp.read().decode("utf-8"))
-                    raw_text = (resp_data.get("response") or resp_data.get("thinking") or "").strip()
+                try:
+                    gen_payload = {
+                        "model": self.model_name,
+                        "prompt": prompt,
+                        "images": [img_b64],
+                        "stream": False,
+                        "format": "json",
+                        "options": {
+                            "temperature": 0.1,
+                        },
+                    }
+                    req_gen = urllib.request.Request(
+                        f"{self.ollama_url}/api/generate",
+                        data=json.dumps(gen_payload).encode("utf-8"),
+                        headers={"Content-Type": "application/json"},
+                    )
+                    with urllib.request.urlopen(req_gen, timeout=self.timeout_seconds) as resp:
+                        resp_data = json.loads(resp.read().decode("utf-8"))
+                        raw_text = (resp_data.get("response") or resp_data.get("thinking") or "").strip()
+                except Exception as gen_err:
+                    logger.debug(f"Generate endpoint error: {gen_err}")
 
             cleaned_json = self._clean_json_text(raw_text)
             if not cleaned_json or not cleaned_json.startswith("{"):
@@ -280,7 +301,7 @@ class VisionService:
                 "severity_signal": sev,
                 "confidence": round(conf, 3),
                 "model_name": self.model_name,
-                "model_version": "qwen3-vl:4b",
+                "model_version": self.model_name,
                 "prompt_version": self.prompt_version,
                 "processing_status": "completed",
                 "created_at": datetime.now(timezone.utc).isoformat(),
@@ -289,7 +310,7 @@ class VisionService:
             return result
 
         except Exception as e:
-            logger.info(f"Qwen3-VL analysis notification: {e}. Applying visual heuristic fallback.")
+            logger.info(f"Qwen2.5-VL analysis notification: {e}. Applying visual heuristic fallback.")
             result = self._fallback_visual_analysis(analysis_id, media_ref, complaint_text)
             self._analysis_cache[media_ref] = result
             return result

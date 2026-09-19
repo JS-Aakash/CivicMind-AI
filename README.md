@@ -43,7 +43,7 @@ CivicMind AI integrates 6 specialized modules into a unified civic operations en
 ### 1. Prerequisites
 - **Node.js**: v18+ (v20+ recommended)
 - **Python**: v3.10+ (v3.12 recommended)
-- **Ollama**: (Optional for local vision reasoning) running `qwen2.5-vl:3b` or `qwen3-vl`
+- **Ollama**: (Optional for local vision reasoning) running `qwen3-vl:4b` or `qwen2.5vl:7b`
 
 ---
 
@@ -60,9 +60,13 @@ python scripts/download_models.py
 ```
 
 #### Start FastAPI Server
+> **Note**: Make sure your terminal is inside the `backend` directory before running:
 ```bash
+cd backend
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
+*(Alternatively, from the project root directory: `python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000 --reload`)*
+
 Interactive API Docs: 👉 **`http://localhost:8000/api/docs`**
 
 ---
