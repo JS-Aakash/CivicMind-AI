@@ -82,6 +82,7 @@ app.add_middleware(
         "http://127.0.0.1:3001",
         settings.FRONTEND_URL,
     ],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

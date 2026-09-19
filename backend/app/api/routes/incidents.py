@@ -265,6 +265,19 @@ async def update_incident_status(incident_id: str, req: IncidentStatusUpdateRequ
             new_status=req.status,
             notes=req.notes,
         )
+        try:
+            from app.api.routes.command_center import record_audit_event
+            record_audit_event(
+                event_type="INCIDENT_STATUS_CHANGE",
+                target_type="incident",
+                target_id=incident_id,
+                actor="Command Center Officer",
+                summary=f"Incident {incident_id} status updated to {req.status.upper()}",
+                details={"status": req.status, "notes": req.notes},
+            )
+        except Exception:
+            pass
+
         return _to_incident_response(updated)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

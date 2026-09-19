@@ -2,7 +2,7 @@
 
 > **Every Voice. Understood. Prioritized. Resolved.**
 
-CivicMind AI is an enterprise-grade civic grievance intelligence platform engineered for multilingual and code-mixed public service grievance classification, priority routing, duplicate detection, temporal-spatial incident clustering, voice & visual evidence extraction, and live municipal command center intelligence. Tailored for municipal operations centered around Erode, Tamil Nadu, India.
+CivicMind AI is an enterprise-grade civic grievance intelligence platform engineered for multilingual and code-mixed public service grievance classification, priority routing, duplicate detection, temporal-spatial incident clustering, voice & visual evidence extraction, and live municipal command center intelligence. Tailored for municipal operations centered around Chennai, Tamil Nadu, India.
 
 ---
 
@@ -81,8 +81,8 @@ Command Center UI: 👉 **`http://localhost:3000`**
 
 ## 🛰️ GIS & Geographic Focus
 
-- **Default Center**: Erode, Tamil Nadu, India (`11.3410° N, 77.7172° E`)
-- **Localities Tracked**: Perundurai Road, Sampath Nagar, Brough Road, Surampatti, Erode Fort, Modakurichi, Thindal, Solar, Chithode, Karungalpalayam.
+- **Default Center**: Chennai, Tamil Nadu, India (`13.0827° N, 80.2707° E`)
+- **Localities Tracked**: T. Nagar, Anna Nagar, Velachery, Mylapore, Adyar, Kodambakkam, Royapettah, Guindy, Vadapalani, Porur.
 
 ---
 

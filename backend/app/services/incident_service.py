@@ -19,23 +19,69 @@ from app.services.duplicate_service import duplicate_detection_service
 logger = logging.getLogger(__name__)
 
 
+import json
+import os
+
 class IncidentService:
     """
-    Manages civic incidents, cluster formation, lifecycle transitions, and merges/splits.
+    Manages civic incidents, cluster formation, lifecycle transitions, and merges/splits
+    with persistent disk serialization.
     """
 
     def __init__(self):
-        # In-memory store for incidents and membership (with DB sync capability)
+        # In-memory store for incidents and membership (with JSON persistence capability)
         self._incidents_store: Dict[str, Dict[str, Any]] = {}
         self._incident_memberships: Dict[str, List[str]] = {}  # incident_id -> list of complaint_ids
         self._complaint_to_incident: Dict[str, str] = {}      # complaint_id -> incident_id
         self._complaints_store: Dict[str, Dict[str, Any]] = {}
+        self._persistence_file = os.path.join(os.path.dirname(__file__), "..", "data", "persisted_store.json")
+        self.load_from_disk()
+
+    def save_to_disk(self) -> None:
+        """Saves current complaints, incidents, and mappings to disk for full persistence across restarts."""
+        try:
+            os.makedirs(os.path.dirname(self._persistence_file), exist_ok=True)
+            data = {
+                "complaints": self._complaints_store,
+                "incidents": self._incidents_store,
+                "incident_memberships": self._incident_memberships,
+                "complaint_to_incident": self._complaint_to_incident,
+            }
+            # Custom JSON serializer for datetimes
+            def _default_serializer(obj):
+                if isinstance(obj, (datetime,)):
+                    return obj.isoformat()
+                return str(obj)
+
+            with open(self._persistence_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, default=_default_serializer, indent=2)
+            logger.debug("Successfully saved store to disk")
+        except Exception as e:
+            logger.warning(f"Failed to persist store to disk: {e}")
+
+    def load_from_disk(self) -> bool:
+        """Loads complaints and incidents from disk if persistence file exists."""
+        if not os.path.exists(self._persistence_file):
+            return False
+        try:
+            with open(self._persistence_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self._complaints_store = data.get("complaints", {})
+            self._incidents_store = data.get("incidents", {})
+            self._incident_memberships = data.get("incident_memberships", {})
+            self._complaint_to_incident = data.get("complaint_to_incident", {})
+            logger.info(f"Loaded {len(self._complaints_store)} complaints and {len(self._incidents_store)} incidents from persistent storage.")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to load store from disk: {e}")
+            return False
 
     def seed_complaints(self, complaints: List[Dict[str, Any]]) -> None:
         """Loads complaints into the working memory pool for clustering."""
         for c in complaints:
             c_id = str(c.get("id"))
             self._complaints_store[c_id] = c
+        self.save_to_disk()
 
     def get_all_incidents(
         self,
@@ -198,6 +244,8 @@ class IncidentService:
                 for cid in member_ids:
                     self._complaint_to_incident[cid] = i_id
 
+            self.save_to_disk()
+
         end_time = datetime.now(timezone.utc)
         runtime_ms = (end_time - start_time).total_seconds() * 1000.0
 
@@ -273,6 +321,7 @@ class IncidentService:
             updated_inc["status"] = best_incident.get("status", "detected")
             self._incidents_store[inc_id] = updated_inc
             logger.info(f"Attached complaint {c_id} to existing incident {best_incident.get('incident_code')} (score: {best_score:.2f})")
+            self.save_to_disk()
             return updated_inc
 
         # Check if this new complaint clusters with other unassigned recent complaints
@@ -292,8 +341,10 @@ class IncidentService:
                     for mid in member_ids:
                         self._complaint_to_incident[mid] = new_id
                     logger.info(f"Formed new incident {new_inc['incident_code']} with {len(members)} complaints")
+                    self.save_to_disk()
                     return new_inc
 
+        self.save_to_disk()
         return None
 
     def merge_incidents(self, source_incident_id: str, target_incident_id: str, reason: str = "Manual merge") -> Dict[str, Any]:
@@ -317,29 +368,29 @@ class IncidentService:
         all_members = [self._complaints_store[cid] for cid in combined_member_ids if cid in self._complaints_store]
 
         # Recompute merged incident
-        merged_inc = IncidentDetector.form_incident_from_cluster(
+        merged = IncidentDetector.form_incident_from_cluster(
             all_members,
             existing_code=tgt.get("incident_code"),
             existing_id=tgt_id,
         )
-        merged_inc["detection_method"] = "MERGED_CLUSTER"
-        merged_inc["merged_from_ids"] = list(set(tgt.get("merged_from_ids", []) + [src_id]))
-        merged_inc["status"] = tgt.get("status", "investigating")
+        merged["merged_from_ids"] = list(set((tgt.get("merged_from_ids") or []) + [src_id]))
+        merged["status"] = tgt.get("status", "investigating")
 
-        # Update stores
-        self._incidents_store[tgt_id] = merged_inc
+        self._incidents_store[tgt_id] = merged
         self._incident_memberships[tgt_id] = combined_member_ids
-        for cid in combined_member_ids:
-            self._complaint_to_incident[cid] = tgt_id
 
-        # Mark source incident as closed / merged
+        # Delete source incident
         if src_id in self._incidents_store:
             del self._incidents_store[src_id]
         if src_id in self._incident_memberships:
             del self._incident_memberships[src_id]
 
+        for cid in combined_member_ids:
+            self._complaint_to_incident[cid] = tgt_id
+
+        self.save_to_disk()
         logger.info(f"Merged incident {src_id} into {tgt_id} ({reason})")
-        return merged_inc
+        return merged
 
     def split_incident(self, incident_id: str, complaint_ids_for_new: List[str], reason: str = "Manual split") -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
@@ -381,6 +432,7 @@ class IncidentService:
         for cid in new_member_ids:
             self._complaint_to_incident[cid] = new_id
 
+        self.save_to_disk()
         logger.info(f"Split incident {orig_id} into {new_id} ({reason})")
         return updated_orig, new_inc
 
@@ -400,6 +452,7 @@ class IncidentService:
             inc["resolved_at"] = datetime.now(timezone.utc)
 
         self._incidents_store[i_id] = inc
+        self.save_to_disk()
         logger.info(f"Updated incident {i_id} status to {new_status}")
         return inc
 

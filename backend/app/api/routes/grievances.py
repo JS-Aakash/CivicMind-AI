@@ -97,13 +97,13 @@ async def create_grievance(request: MultimodalComplaintCreate):
     media_items = []
     vision_evidence_list = []
     visual_hazards = []
-    for mid in request.media_ids:
+    for mid in (request.media_ids or []):
         m = media_service.get_media(mid)
         if m:
             media_items.append(m)
-            if m["media_type"] == "image":
+            if m.get("media_type") == "image":
                 vis_res = vision_service.analyze_image(
-                    image_path=m["storage_path"],
+                    image_path=m.get("storage_path", ""),
                     media_id=mid,
                     complaint_text=complaint_text,
                 )
@@ -113,8 +113,8 @@ async def create_grievance(request: MultimodalComplaintCreate):
                         visual_hazards.append(h)
 
     # 4. Integrate Visual Hazard Signals into Priority
-    effective_priority = analysis.priority
-    requires_review = analysis.requires_human_review or False
+    effective_priority = getattr(analysis, "priority", "medium") or "medium"
+    requires_review = getattr(analysis, "requires_human_review", False) or False
     conflict_detected = False
     conflict_reason = None
 
@@ -122,7 +122,7 @@ async def create_grievance(request: MultimodalComplaintCreate):
         primary_vis = vision_evidence_list[0]
         # Check for multimodal evidence conflict
         conflict_detected, conflict_reason = vision_service.detect_multimodal_conflict(
-            text_category=analysis.category,
+            text_category=getattr(analysis, "category", "other"),
             vision_category=primary_vis.get("evidence_category", "OTHER"),
         )
         if conflict_detected:
@@ -162,31 +162,43 @@ async def create_grievance(request: MultimodalComplaintCreate):
         "evidence_strength": "HIGH" if (vision_evidence_list and voice_record) else ("HIGH" if vision_evidence_list else "MEDIUM"),
     }
 
+    # Format secondary departments safely
+    sec_depts_list = []
+    for d in (getattr(analysis, "secondary_departments", []) or []):
+        if hasattr(d, "model_dump"):
+            sec_depts_list.append(d.model_dump())
+        elif hasattr(d, "dict"):
+            sec_depts_list.append(d.dict())
+        elif isinstance(d, dict):
+            sec_depts_list.append(d)
+        else:
+            sec_depts_list.append(str(d))
+
     complaint_dict = {
         "id": complaint_id,
         "complaint_code": complaint_code,
         "text": complaint_text,
-        "language": analysis.primary_language,
-        "script": analysis.script,
-        "is_code_mixed": analysis.is_code_mixed,
-        "detected_languages": analysis.languages,
-        "is_grievance": analysis.is_grievance,
-        "category": analysis.category,
-        "subcategory": analysis.subcategory,
-        "severity": analysis.severity,
+        "language": getattr(analysis, "primary_language", "en"),
+        "script": getattr(analysis, "script", "Latin"),
+        "is_code_mixed": getattr(analysis, "is_code_mixed", False),
+        "detected_languages": getattr(analysis, "languages", ["en"]),
+        "is_grievance": getattr(analysis, "is_grievance", True),
+        "category": getattr(analysis, "category", "general"),
+        "subcategory": getattr(analysis, "subcategory", "other"),
+        "severity": getattr(analysis, "severity", "medium"),
         "priority": effective_priority,
-        "confidence": analysis.confidence,
-        "entities": analysis.entities,
-        "duration_mentioned": analysis.duration_mentioned,
+        "confidence": getattr(analysis, "confidence", 0.9),
+        "entities": getattr(analysis, "entities", {}),
+        "duration_mentioned": getattr(analysis, "duration_mentioned", None),
         "latitude": valid_lat,
         "longitude": valid_lng,
         "location_text": request.location_text or ("GPS Location" if valid_lat else None),
         "ward": request.ward or "Ward 112",
-        "ai_explanation": analysis.explanation,
+        "ai_explanation": getattr(analysis, "explanation", ""),
         "department_id": None,
-        "department_name": analysis.department_name,
-        "secondary_departments": [d.model_dump() for d in (analysis.secondary_departments or [])],
-        "routing_decision": "OFFICER_REVIEW" if requires_review else (analysis.routing_decision or "AUTO_ROUTE"),
+        "department_name": getattr(analysis, "department_name", "Municipal Operations Cell"),
+        "secondary_departments": sec_depts_list,
+        "routing_decision": "OFFICER_REVIEW" if requires_review else (getattr(analysis, "routing_decision", "AUTO_ROUTE") or "AUTO_ROUTE"),
         "requires_human_review": requires_review,
         "status": "open",
         "created_at": now.isoformat(),
@@ -203,6 +215,24 @@ async def create_grievance(request: MultimodalComplaintCreate):
     assigned_inc = incident_service.add_complaint_incremental(complaint_dict)
     if assigned_inc:
         complaint_dict["incident_id"] = assigned_inc.get("id")
+
+    try:
+        from app.api.routes.command_center import record_audit_event
+        record_audit_event(
+            event_type="COMPLAINT_REGISTERED",
+            target_type="complaint",
+            target_id=complaint_dict["complaint_code"],
+            actor="Citizen Intake",
+            summary=f"New grievance registered: {complaint_dict['complaint_code']} ({analysis.category.upper()} / {effective_priority.upper()})",
+            details={
+                "category": analysis.category,
+                "priority": effective_priority,
+                "department_name": analysis.department_name,
+                "requires_review": requires_review,
+            },
+        )
+    except Exception as aud_err:
+        logger.warning(f"Audit log recording error: {aud_err}")
 
     return _to_response(complaint_dict)
 

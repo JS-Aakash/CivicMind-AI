@@ -94,6 +94,19 @@ async def override_complaint_decision(complaint_id: str, request: OfficerOverrid
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
+    try:
+        from app.api.routes.command_center import record_audit_event
+        record_audit_event(
+            event_type="OFFICER_OVERRIDE",
+            target_type="complaint",
+            target_id=complaint_id,
+            actor=request.actor or "Triage Officer",
+            summary=f"Officer modified {request.field}: {request.original_value} -> {request.new_value}",
+            details=audit_record,
+        )
+    except Exception:
+        pass
+
     return OfficerOverrideResponse(
         status="success",
         complaint_id=complaint_id,
@@ -106,6 +119,19 @@ async def review_complaint(complaint_id: str, approved: bool = True, notes: Opti
     """
     Approves or flags a pending complaint requiring officer review.
     """
+    try:
+        from app.api.routes.command_center import record_audit_event
+        record_audit_event(
+            event_type="OFFICER_APPROVAL" if approved else "OFFICER_REASSIGN",
+            target_type="complaint",
+            target_id=complaint_id,
+            actor="Triage Officer",
+            summary=f"Officer review: {'APPROVED' if approved else 'REASSIGNED'}",
+            details={"notes": notes},
+        )
+    except Exception:
+        pass
+
     return {
         "complaint_id": complaint_id,
         "status": "approved" if approved else "flagged_for_manual_triage",

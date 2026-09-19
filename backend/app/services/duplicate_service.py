@@ -233,13 +233,21 @@ class DuplicateDetectionService:
 
         # 5. Composite score calculation
         if has_geo:
+            max_rel_dist = self.thresholds.get("max_related_distance_meters", 3000.0)
+            if dist_meters is not None and dist_meters > max_rel_dist:
+                # Strong spatial suppression: drops towards 0 when outside city neighborhood distance
+                spatial_penalty = max(0.0, math.exp(-(dist_meters - max_rel_dist) / 1000.0))
+            else:
+                spatial_penalty = 1.0
+
             weights = self.weights_with_geo
-            combined_score = (
+            raw_score = (
                 weights["semantic"] * semantic_sim
                 + weights["geographic"] * (geo_score or 0.0)
                 + weights["temporal"] * temporal_score
                 + weights["category"] * cat_score
             )
+            combined_score = raw_score * spatial_penalty
         else:
             weights = self.weights_no_geo
             combined_score = (
@@ -252,17 +260,25 @@ class DuplicateDetectionService:
         dup_thresh = self.thresholds["duplicate_score"]
         rel_thresh = self.thresholds["related_score"]
 
-        # Classification rule: DUPLICATE requires exact category match (cat_score == 1.0)
+        # Classification rule: DUPLICATE & RELATED require strict geographic boundaries when coordinates exist
         if has_geo:
+            max_dup_dist = self.thresholds["max_duplicate_distance_meters"]
+            max_rel_dist = self.thresholds["max_related_distance_meters"]
+
             if (
                 cat_score >= 1.0
                 and combined_score >= dup_thresh
                 and semantic_sim >= 0.78
-                and dist_meters <= self.thresholds["max_duplicate_distance_meters"]
+                and dist_meters is not None
+                and dist_meters <= max_dup_dist
                 and time_diff_hours <= 96.0
             ):
                 rel_type = "DUPLICATE"
-            elif combined_score >= rel_thresh or (semantic_sim >= 0.75 and dist_meters <= self.thresholds["max_related_distance_meters"]):
+            elif (
+                dist_meters is not None
+                and dist_meters <= max_rel_dist
+                and combined_score >= rel_thresh
+            ):
                 rel_type = "RELATED"
             else:
                 rel_type = "NEW"
