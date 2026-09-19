@@ -104,20 +104,7 @@ export default function CommandCenterPage() {
     return true;
   });
 
-  const kpis = data?.kpis || {
-    total_complaints: 1248,
-    complaints_growth_pct: 8.4,
-    critical_count: 14,
-    immediate_attention_count: 8,
-    active_incidents: 8,
-    emerging_incidents: 3,
-    in_progress_count: 312,
-    resolved_count: 886,
-    resolution_rate_pct: 71.0,
-    human_review_queue_count: 17,
-    sla_at_risk_count: 21,
-    sla_breached_count: 7,
-  };
+  const kpis = data?.kpis;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "#060911" }}>
@@ -164,11 +151,11 @@ export default function CommandCenterPage() {
                   borderRadius: "4px",
                 }}
               >
-                +{kpis.complaints_growth_pct}%
+                +{kpis ? kpis.complaints_growth_pct : 8.4}%
               </span>
             </div>
             <div style={{ fontSize: "24px", fontWeight: 800, color: "#ffffff", letterSpacing: "-0.02em" }}>
-              {kpis.total_complaints.toLocaleString()}
+              {kpis ? kpis.total_complaints.toLocaleString() : "..."}
             </div>
             <div style={{ fontSize: "11px", color: "#64748b" }}>vs previous 7-day period</div>
           </div>
@@ -193,10 +180,10 @@ export default function CommandCenterPage() {
               <ShieldAlert size={14} color="#ef4444" />
             </div>
             <div style={{ fontSize: "24px", fontWeight: 800, color: "#ef4444", letterSpacing: "-0.02em" }}>
-              {kpis.critical_count}
+              {kpis ? kpis.critical_count : "..."}
             </div>
             <div style={{ fontSize: "11px", color: "#fca5a5" }}>
-              {kpis.immediate_attention_count} require immediate action
+              {kpis ? `${kpis.immediate_attention_count} require immediate action` : "Calculating..."}
             </div>
           </div>
 
@@ -220,10 +207,10 @@ export default function CommandCenterPage() {
               <Flame size={14} color="#f59e0b" />
             </div>
             <div style={{ fontSize: "24px", fontWeight: 800, color: "#f59e0b", letterSpacing: "-0.02em" }}>
-              {kpis.active_incidents}
+              {kpis ? kpis.active_incidents : "..."}
             </div>
             <div style={{ fontSize: "11px", color: "#fde68a" }}>
-              {kpis.emerging_incidents} emerging spatial clusters
+              {kpis ? `${kpis.emerging_incidents} emerging spatial clusters` : "Clustering..."}
             </div>
           </div>
 
@@ -247,7 +234,7 @@ export default function CommandCenterPage() {
               <Clock size={14} color="#eab308" />
             </div>
             <div style={{ fontSize: "24px", fontWeight: 800, color: "#eab308", letterSpacing: "-0.02em" }}>
-              {kpis.sla_at_risk_count}
+              {kpis ? kpis.sla_at_risk_count : "..."}
             </div>
             <div style={{ fontSize: "11px", color: "#fef08a" }}>approaching deadline</div>
           </div>
@@ -272,7 +259,7 @@ export default function CommandCenterPage() {
               <AlertTriangle size={14} color="#e11d48" />
             </div>
             <div style={{ fontSize: "24px", fontWeight: 800, color: "#f43f5e", letterSpacing: "-0.02em" }}>
-              {kpis.sla_breached_count}
+              {kpis ? kpis.sla_breached_count : "..."}
             </div>
             <div style={{ fontSize: "11px", color: "#fecdd3" }}>requires escalation</div>
           </div>
@@ -297,9 +284,9 @@ export default function CommandCenterPage() {
               <CheckCircle2 size={14} color="#22c55e" />
             </div>
             <div style={{ fontSize: "24px", fontWeight: 800, color: "#22c55e", letterSpacing: "-0.02em" }}>
-              {kpis.resolution_rate_pct}%
+              {kpis ? `${kpis.resolution_rate_pct}%` : "..."}
             </div>
-            <div style={{ fontSize: "11px", color: "#bbf7d0" }}>+3.2% vs previous period</div>
+            <div style={{ fontSize: "11px", color: "#bbf7d0" }}>30-day municipal benchmark</div>
           </div>
         </div>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import {
   Mic,
   Camera,
@@ -24,14 +25,16 @@ import {
   ShieldAlert,
   Clock,
   Building2,
-  Zap,
+  ArrowLeft,
+  Layers,
+  FileText,
+  Radio,
+  Check,
 } from "lucide-react";
 import { analyzeGrievance, createGrievance, uploadAudio, uploadImage } from "@/lib/api";
 import { convertBlobTo16kHzWav } from "@/lib/audio";
 import { AIAnalysisPanel } from "@/components/AIAnalysisPanel";
 import type { AIAnalysisResult, VisionAnalysisItem, VoiceTranscriptionItem } from "@/lib/types";
-
-
 
 const PRESET_LOCALITIES = [
   { name: "T. Nagar (Ward 112)", lat: 13.0415, lng: 80.2338 },
@@ -39,6 +42,13 @@ const PRESET_LOCALITIES = [
   { name: "Velachery (Ward 178)", lat: 12.9755, lng: 80.2215 },
   { name: "Mylapore (Ward 124)", lat: 13.0335, lng: 80.2675 },
   { name: "Adyar (Ward 175)", lat: 13.0012, lng: 80.2565 },
+];
+
+const QUICK_PROMPTS = [
+  { label: "Water Cut", text: "Water supply disruption for the past 3 days in our residential area." },
+  { label: "தமிழ் குடிநீர்", text: "கடந்த மூன்று நாட்களாக குடிநீர் வரவில்லை. குழாயில் அழுக்கு நீர் வருகிறது." },
+  { label: "Pothole Hazard", text: "Deep hazardous potholes on the main carriage way causing severe traffic risk." },
+  { label: "Garbage Pile", text: "Overflowing municipal garbage bin near the street corner creating health risk." },
 ];
 
 export default function ReportPage() {
@@ -138,7 +148,7 @@ export default function ReportPage() {
         setLongitude(lng);
         setGpsStatus("locked");
         if (!locationText) {
-          setLocationText(`GPS Locality (${lat}, ${lng})`);
+          setLocationText(`Chennai Geo (${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E)`);
         }
       },
       (err) => {
@@ -147,7 +157,7 @@ export default function ReportPage() {
         if (latitude === null) {
           setLatitude(13.0415);
           setLongitude(80.2338);
-          if (!locationText) setLocationText("T. Nagar, Chennai");
+          if (!locationText) setLocationText("T. Nagar, Ward 112, Chennai");
         }
       },
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
@@ -162,7 +172,7 @@ export default function ReportPage() {
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Voice Recording Functions
+  // Voice Recording Functions (Whisper STT)
   // ─────────────────────────────────────────────────────────────────────────────
   const startRecording = async () => {
     setTranscriptionError(null);
@@ -183,12 +193,11 @@ export default function ReportPage() {
 
         setTranscribing(true);
         try {
-          // Convert audio to standard 16kHz PCM WAV for neural Whisper
           let uploadBlob: Blob = rawBlob;
           try {
             uploadBlob = await convertBlobTo16kHzWav(rawBlob);
           } catch (convErr) {
-            console.warn("Could not resample in browser, uploading raw blob:", convErr);
+            console.warn("Audio resampling fallback:", convErr);
           }
 
           const audioFile = new File([uploadBlob], "voice_grievance.wav", { type: "audio/wav" });
@@ -201,8 +210,8 @@ export default function ReportPage() {
           }
           triggerAutoAnalysis(transResp.raw_transcript);
         } catch (err: any) {
-          console.error("Audio upload/transcription error:", err);
-          setTranscriptionError(err.message || "Failed to transcribe audio. Please enter description manually.");
+          console.error("Audio upload error:", err);
+          setTranscriptionError(err.message || "Failed to transcribe audio. You can enter description manually.");
         } finally {
           setTranscribing(false);
         }
@@ -215,7 +224,7 @@ export default function ReportPage() {
         setRecordingDuration((prev) => prev + 1);
       }, 1000);
     } catch (err) {
-      alert("Microphone permission denied or not available in browser.");
+      alert("Microphone permission was denied. Please allow microphone access in browser.");
       console.error(err);
     }
   };
@@ -268,7 +277,7 @@ export default function ReportPage() {
           analysis: {
             analysis_id: "client-img-" + Date.now(),
             media_id: "client-media",
-            observations: ["Photo evidence attached by citizen"],
+            observations: ["Visual proof attached by citizen"],
             objects: ["infrastructure"],
             possible_hazards: [],
             evidence_category: "OTHER",
@@ -288,6 +297,7 @@ export default function ReportPage() {
     const file = e.target.files[0];
     await processImageFile(file);
   };
+
   useEffect(() => {
     if (isCameraOpen && streamRef.current && videoRef.current) {
       videoRef.current.srcObject = streamRef.current;
@@ -311,7 +321,6 @@ export default function ReportPage() {
           audio: false,
         });
       } catch {
-        // Fallback for laptop webcams without facingMode support
         stream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: false,
@@ -321,15 +330,14 @@ export default function ReportPage() {
       streamRef.current = stream;
       setIsCameraOpen(true);
 
-      // Timeout backup ensures ref is mounted in DOM
       setTimeout(() => {
         if (videoRef.current && streamRef.current) {
           videoRef.current.srcObject = streamRef.current;
           videoRef.current.play().catch((err) => console.warn("Video play error:", err));
         }
-      }, 50);
+      }, 60);
     } catch (err: any) {
-      alert("Camera access was denied or is not supported by your browser: " + (err.message || err));
+      alert("Camera access was denied or unavailable: " + (err.message || err));
       setIsCameraOpen(false);
     }
   };
@@ -398,7 +406,7 @@ export default function ReportPage() {
   const handleSubmit = async () => {
     const effectiveText = editedTranscript || text;
     if (!effectiveText.trim() && images.length === 0 && !audioId) {
-      alert("Please provide a description or voice recording before submitting.");
+      alert("Please provide a description, voice recording, or photo before submitting.");
       return;
     }
 
@@ -716,12 +724,15 @@ export default function ReportPage() {
 
   if (!isMounted) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Loader2 size={32} className="spin" color="var(--accent-indigo)" />
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#060911" }}>
+        <Loader2 size={32} className="spin" color="#6366f1" />
       </div>
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // SUBMISSION SUCCESS VIEW
+  // ─────────────────────────────────────────────────────────────────────────────
   if (submitted) {
     return (
       <div
@@ -732,75 +743,81 @@ export default function ReportPage() {
           alignItems: "center",
           justifyContent: "center",
           padding: 24,
-          background: "var(--brand-navy)",
+          background: "radial-gradient(ellipse at top, #0f172a 0%, #060911 100%)",
         }}
       >
         <div
           style={{
-            background: "var(--brand-card)",
-            border: "1px solid var(--accent-indigo)",
-            borderRadius: 16,
+            background: "#0c1322",
+            border: "1px solid rgba(99,102,241,0.35)",
+            borderRadius: 20,
             padding: 40,
             maxWidth: 580,
             width: "100%",
             textAlign: "center",
-            boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
+            boxShadow: "0 25px 60px rgba(0,0,0,0.8)",
           }}
         >
           <div
             style={{
-              width: 72,
-              height: 72,
+              width: 76,
+              height: 76,
               borderRadius: "50%",
-              background: "rgba(34,197,94,0.15)",
+              background: "rgba(34,197,94,0.12)",
+              border: "2px solid rgba(34,197,94,0.3)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              margin: "0 auto 16px",
-              boxShadow: "0 0 28px rgba(34,197,94,0.3)",
+              margin: "0 auto 20px",
+              boxShadow: "0 0 30px rgba(34,197,94,0.25)",
             }}
           >
-            <CheckCircle size={40} color="#22c55e" />
+            <CheckCircle size={42} color="#22c55e" />
           </div>
-          <h2 style={{ marginBottom: 8, fontSize: 24, fontWeight: 800 }}>Grievance Registered</h2>
-          <p style={{ color: "var(--text-muted)", fontSize: 14, marginBottom: 20 }}>
-            Your grievance has been authenticated, analyzed by AI triage, and dispatched to the municipal department.
+
+          <h2 style={{ marginBottom: 8, fontSize: 26, fontWeight: 800, color: "#ffffff", letterSpacing: "-0.02em" }}>
+            Grievance Registered Successfully
+          </h2>
+          <p style={{ color: "#94a3b8", fontSize: 14, marginBottom: 24, lineHeight: 1.5 }}>
+            Your grievance has been validated by multimodal AI, geocoded to Chennai Municipal Wards, and routed to the department response cell.
           </p>
 
           <div
             style={{
-              background: "var(--brand-surface)",
-              borderRadius: 12,
-              padding: 18,
-              marginBottom: 20,
-              border: "1px solid var(--brand-border)",
+              background: "rgba(15, 23, 42, 0.75)",
+              borderRadius: 14,
+              padding: 20,
+              marginBottom: 24,
+              border: "1px solid rgba(51, 65, 85, 0.6)",
               textAlign: "left",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Tracking ID</span>
-              <span style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 800, color: "var(--accent-indigo)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid rgba(51, 65, 85, 0.4)" }}>
+              <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>Official Complaint ID</span>
+              <span style={{ fontFamily: "monospace", fontSize: 18, fontWeight: 800, color: "#818cf8" }}>
                 {complaintCode}
               </span>
             </div>
             {analysis && (
               <>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, fontSize: 12 }}>
-                  <span style={{ color: "var(--text-muted)" }}>Assigned Department</span>
-                  <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{analysis.department_name}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, fontSize: 13 }}>
+                  <span style={{ color: "#94a3b8" }}>Assigned Department</span>
+                  <span style={{ fontWeight: 600, color: "#f1f5f9" }}>{analysis.department_name}</span>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, fontSize: 12 }}>
-                  <span style={{ color: "var(--text-muted)" }}>Priority & SLA</span>
-                  <span style={{ fontWeight: 700, color: analysis.priority === "critical" ? "#ef4444" : "#f59e0b" }}>
-                    {analysis.priority.toUpperCase()} ({analysis.sla?.target_sla_hours || 24} hours)
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, fontSize: 13 }}>
+                  <span style={{ color: "#94a3b8" }}>Priority & Target SLA</span>
+                  <span style={{ fontWeight: 700, color: analysis.priority === "critical" ? "#f43f5e" : "#fbbf24" }}>
+                    {analysis.priority.toUpperCase()} ({analysis.sla?.target_sla_hours || 24}h Deadline)
                   </span>
                 </div>
               </>
             )}
             {latitude && longitude && (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
-                <span style={{ color: "var(--text-muted)" }}>📍 GPS Location</span>
-                <span style={{ fontFamily: "monospace", color: "#22c55e" }}>{latitude.toFixed(4)}° N, {longitude.toFixed(4)}° E</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
+                <span style={{ color: "#94a3b8" }}>📍 Geo-Coordinates</span>
+                <span style={{ fontFamily: "monospace", color: "#4ade80" }}>
+                  {latitude.toFixed(4)}° N, {longitude.toFixed(4)}° E
+                </span>
               </div>
             )}
           </div>
@@ -808,44 +825,70 @@ export default function ReportPage() {
           {/* Download Official Proof Receipt Button */}
           <button
             onClick={handleDownloadReceipt}
-            className="btn btn-primary"
             style={{
               width: "100%",
-              marginBottom: 12,
+              marginBottom: 14,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               gap: 8,
-              padding: "13px 20px",
+              padding: "14px 20px",
               fontSize: 14,
               fontWeight: 700,
               background: "linear-gradient(135deg, #4f46e5, #3b82f6)",
-              boxShadow: "0 4px 14px rgba(79,70,229,0.4)",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: 10,
+              cursor: "pointer",
+              boxShadow: "0 4px 16px rgba(79,70,229,0.35)",
             }}
           >
             <span>📄</span>
-            <span>Download Official Receipt (PDF / Print)</span>
+            <span>Download Official Grievance Receipt (PDF)</span>
           </button>
 
-          <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-            <a
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+            <Link
               href={`/my-complaints/${complaintCode || complaintId}`}
-              className="btn btn-secondary"
-              style={{ flex: 1, textDecoration: "none", display: "flex", justifyContent: "center", alignItems: "center", gap: 6, fontSize: 13, padding: "12px" }}
+              style={{
+                textDecoration: "none",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 13,
+                fontWeight: 600,
+                padding: "12px",
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 8,
+                color: "#e2e8f0",
+              }}
             >
-              📋 Track Status
-            </a>
-            <a
+              📋 Track Complaint
+            </Link>
+            <Link
               href="/map"
-              className="btn btn-secondary"
-              style={{ flex: 1, textDecoration: "none", display: "flex", justifyContent: "center", alignItems: "center", gap: 6, fontSize: 13, padding: "12px" }}
+              style={{
+                textDecoration: "none",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 13,
+                fontWeight: 600,
+                padding: "12px",
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 8,
+                color: "#e2e8f0",
+              }}
             >
               🗺️ Live Civic Map
-            </a>
+            </Link>
           </div>
 
           <button
-            className="btn btn-ghost"
             onClick={() => {
               setSubmitted(false);
               setText("");
@@ -855,161 +898,306 @@ export default function ReportPage() {
               setImages([]);
               setCurrentStep(1);
             }}
-            style={{ width: "100%", fontSize: 12, color: "var(--text-muted)" }}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#64748b",
+              fontSize: 13,
+              cursor: "pointer",
+              padding: "6px",
+            }}
           >
-            + File Another Grievance
+            + File Another Municipal Grievance
           </button>
         </div>
       </div>
     );
   }
 
-  const handleStepClick = (targetStep: number) => {
-    if (targetStep < currentStep) {
-      setCurrentStep(targetStep);
-      return;
-    }
-    // Allow jumping to Step 2 anytime (citizen can choose to speak)
-    if (targetStep === 2) {
-      setCurrentStep(2);
-      return;
-    }
-    const hasTextOrVoice = (text && text.trim().length > 0) || (editedTranscript && editedTranscript.trim().length > 0) || !!audioId;
-    if (targetStep === 3) {
-      if (!hasTextOrVoice) {
-        alert("Please provide a text or voice description of your civic issue before proceeding.");
-        return;
-      }
-      setCurrentStep(3);
-      return;
-    }
-    if (targetStep === 4) {
-      if (!hasTextOrVoice && images.length === 0) {
-        alert("Please provide a text or voice description of your civic issue before setting location.");
-        return;
-      }
-      setCurrentStep(4);
-      return;
-    }
-    if (targetStep === 5) {
-      if (!hasTextOrVoice && images.length === 0) {
-        alert("Please provide grievance details before reviewing.");
-        return;
-      }
-      handleAnalyze();
-    }
-  };
+  // ─────────────────────────────────────────────────────────────────────────────
+  // MAIN WIZARD VIEW
+  // ─────────────────────────────────────────────────────────────────────────────
+  const steps = [
+    { num: 1, title: "1. Describe", desc: "Written Issue" },
+    { num: 2, title: "2. Voice Note", desc: "Whisper STT" },
+    { num: 3, title: "3. Photo Evidence", desc: "Camera / Upload" },
+    { num: 4, title: "4. Location", desc: "Ward & GPS" },
+    { num: 5, title: "5. Review", desc: "AI Dispatch" },
+  ];
 
   return (
-    <div>
-      <div className="top-bar" style={{ height: "auto", minHeight: 68, padding: "14px 28px", borderBottom: "1px solid var(--brand-border)" }}>
-        <div>
-          <h1 style={{ fontSize: 19, fontWeight: 800, color: "#ffffff", letterSpacing: "-0.01em", margin: 0, lineHeight: 1.25 }}>
-            Citizen Grievance Submission
-          </h1>
-          <p style={{ fontSize: 13, color: "#cbd5e1", margin: "4px 0 0 0", fontWeight: 500 }}>
-            Submit civic grievances using text, voice notes, or photo evidence with instant local AI triage & SLA dispatch
-          </p>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "28px 24px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1.25fr 1fr", gap: 24, alignItems: "start" }}>
-          {/* Form side */}
+    <div style={{ minHeight: "100vh", backgroundColor: "#060911", color: "#f8fafc", paddingBottom: 60 }}>
+      {/* Top Header Bar */}
+      <header
+        style={{
+          borderBottom: "1px solid rgba(51, 65, 85, 0.5)",
+          backgroundColor: "#0a0f1d",
+          padding: "16px 28px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <Link
+            href="/"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 13,
+              color: "#94a3b8",
+              textDecoration: "none",
+              padding: "6px 12px",
+              borderRadius: 6,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            <ArrowLeft size={14} /> Back to Portal
+          </Link>
           <div>
-            {/* Wizard Steps Bar */}
-            <div className="card" style={{ marginBottom: 18, padding: "16px 20px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                {[
-                  { step: 1, label: "Describe" },
-                  { step: 2, label: "Voice" },
-                  { step: 3, label: "Evidence (Optional)" },
-                  { step: 4, label: "Location" },
-                  { step: 5, label: "AI Review" },
-                ].map((s) => {
-                  const hasContent = (text && text.trim().length > 0) || (editedTranscript && editedTranscript.trim().length > 0) || !!audioId;
-                  const isClickable = s.step <= currentStep || s.step === 2 || (s.step === 3 && hasContent) || (s.step === 4 && hasContent);
-                  return (
+            <h1 style={{ fontSize: 18, fontWeight: 800, color: "#ffffff", letterSpacing: "-0.01em", margin: 0 }}>
+              Citizen Grievance Submission Portal
+            </h1>
+            <p style={{ fontSize: 12, color: "#94a3b8", margin: "2px 0 0 0" }}>
+              Submit municipal issues with voice notes, live camera photos, and GPS location
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, color: "#4ade80", background: "rgba(34, 197, 94, 0.1)", border: "1px solid rgba(34, 197, 94, 0.25)", padding: "4px 10px", borderRadius: 9999, fontWeight: 600 }}>
+            ● AI Triage Online
+          </span>
+        </div>
+      </header>
+
+      {/* Main Container */}
+      <main style={{ maxWidth: 1240, margin: "0 auto", padding: "28px 24px" }}>
+        {/* Step Progress Tracker */}
+        <div
+          style={{
+            backgroundColor: "#0d1424",
+            border: "1px solid rgba(51, 65, 85, 0.6)",
+            borderRadius: 14,
+            padding: "14px 20px",
+            marginBottom: 24,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.3)",
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(5, 1fr)",
+              gap: 8,
+              position: "relative",
+            }}
+          >
+            {steps.map((s) => {
+              const isActive = currentStep === s.num;
+              const isDone = currentStep > s.num;
+              return (
+                <button
+                  key={s.num}
+                  type="button"
+                  onClick={() => setCurrentStep(s.num)}
+                  style={{
+                    background: isActive
+                      ? "rgba(99, 102, 241, 0.15)"
+                      : isDone
+                      ? "rgba(34, 197, 94, 0.08)"
+                      : "transparent",
+                    border: isActive
+                      ? "1px solid #6366f1"
+                      : isDone
+                      ? "1px solid rgba(34, 197, 94, 0.3)"
+                      : "1px solid transparent",
+                    borderRadius: 8,
+                    padding: "8px 10px",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: "50%",
+                      backgroundColor: isActive ? "#6366f1" : isDone ? "#22c55e" : "#1e293b",
+                      color: "#ffffff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {isDone ? <Check size={12} strokeWidth={3} /> : s.num}
+                  </div>
+                  <div style={{ overflow: "hidden" }}>
                     <div
-                      key={s.step}
-                      onClick={() => handleStepClick(s.step)}
                       style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        gap: 4,
-                        cursor: isClickable ? "pointer" : "not-allowed",
-                        opacity: currentStep >= s.step ? 1 : isClickable ? 0.75 : 0.35,
+                        fontSize: 12,
+                        fontWeight: isActive ? 700 : 600,
+                        color: isActive ? "#ffffff" : isDone ? "#e2e8f0" : "#64748b",
+                        whiteSpace: "nowrap",
+                        textOverflow: "ellipsis",
+                        overflow: "hidden",
                       }}
                     >
-                      <div
-                        style={{
-                          width: 26,
-                          height: 26,
-                          borderRadius: "50%",
-                          background: currentStep === s.step ? "var(--accent-indigo)" : currentStep > s.step ? "#22c55e" : "rgba(255,255,255,0.1)",
-                          color: "#fff",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: 11,
-                          fontWeight: 700,
-                          boxShadow: currentStep === s.step ? "0 0 10px rgba(99,102,241,0.5)" : "none",
-                        }}
-                      >
-                        {currentStep > s.step ? "✓" : s.step}
-                      </div>
-                      <span style={{ fontSize: 11, color: currentStep === s.step ? "var(--text-primary)" : "var(--text-muted)", fontWeight: 600, textAlign: "center" }}>
-                        {s.label}
-                      </span>
+                      {s.title}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-            {/* Step 1: Text Description */}
+        {/* 2-Column Split: Form Wizard + Live AI Intelligence Panel */}
+        <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 24, alignItems: "start" }}>
+          {/* Left Column: Current Wizard Step */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* STEP 1: DESCRIBE THE ISSUE */}
             {currentStep === 1 && (
-              <div className="card" style={{ padding: 20 }}>
-                <div style={{ marginBottom: 14 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>
-                    Step 1: Describe the Civic Issue
-                  </h3>
-                  <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                    Write naturally in Tamil, Tanglish, Hindi, Hinglish, or English. You can also proceed to record a voice note on the next step.
-                  </p>
+              <div
+                style={{
+                  backgroundColor: "#0d1424",
+                  border: "1px solid rgba(51, 65, 85, 0.6)",
+                  borderRadius: 14,
+                  padding: 24,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(99,102,241,0.15)", display: "flex", alignItems: "center", justifyContent: "center", color: "#818cf8" }}>
+                    <FileText size={18} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: 16, fontWeight: 700, color: "#ffffff", margin: 0 }}>
+                      Step 1: Describe the Civic Issue
+                    </h2>
+                    <p style={{ fontSize: 12, color: "#94a3b8", margin: "2px 0 0 0" }}>
+                      Write in Tamil (தமிழ்), Tanglish, Hindi (हिंदी), Hinglish, or English.
+                    </p>
+                  </div>
                 </div>
 
-                <div style={{ marginBottom: 16 }}>
-                  <textarea
-                    className="input"
-                    value={text}
-                    onChange={(e) => {
-                      setText(e.target.value);
-                      triggerAutoAnalysis(e.target.value);
-                    }}
-                    placeholder="Describe your issue in Tamil, Tanglish, Hindi, Hinglish, or English (e.g., 'Anna 3 days ah water supply varala', 'Huge pothole on main road')..."
-                    style={{ minHeight: 130, fontSize: 13, lineHeight: 1.6, resize: "vertical" }}
-                  />
+                {/* Quick Prompts */}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "16px 0 12px" }}>
+                  <span style={{ fontSize: 11, color: "#64748b", alignSelf: "center", marginRight: 4 }}>Quick templates:</span>
+                  {QUICK_PROMPTS.map((qp, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        setText(qp.text);
+                        triggerAutoAnalysis(qp.text);
+                      }}
+                      style={{
+                        background: "rgba(255,255,255,0.04)",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: 6,
+                        padding: "3px 8px",
+                        fontSize: 11,
+                        color: "#94a3b8",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {qp.label}
+                    </button>
+                  ))}
                 </div>
 
-                <div style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                {/* Textarea Input */}
+                <textarea
+                  value={text}
+                  onChange={(e) => {
+                    setText(e.target.value);
+                    triggerAutoAnalysis(e.target.value);
+                  }}
+                  placeholder="Describe your civic grievance here (e.g. '3 days ah water supply varala near Ward 112', 'Hazardous open electric wire sparking near bus stop', 'ரோட்டில் பெரிய பள்ளம் ஏற்பட்டுள்ளது')..."
+                  style={{
+                    width: "100%",
+                    minHeight: 140,
+                    backgroundColor: "#070b14",
+                    border: "1px solid rgba(51, 65, 85, 0.8)",
+                    borderRadius: 10,
+                    padding: "14px 16px",
+                    color: "#f8fafc",
+                    fontSize: 14,
+                    lineHeight: 1.6,
+                    resize: "vertical",
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, fontSize: 11, color: "#64748b" }}>
+                  <span>{text.length} characters entered</span>
+                  <span>AI classifies category, priority & department in real time</span>
+                </div>
+
+                {/* Step 1 Actions Bar */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginTop: 20,
+                    paddingTop: 16,
+                    borderTop: "1px solid rgba(51, 65, 85, 0.4)",
+                    flexWrap: "wrap",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 8 }}>
                     <button
                       type="button"
                       onClick={() => setCurrentStep(2)}
-                      className="btn btn-secondary"
-                      style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}
+                      style={{
+                        background: "rgba(239, 68, 68, 0.12)",
+                        border: "1px solid rgba(239, 68, 68, 0.35)",
+                        borderRadius: 8,
+                        padding: "8px 14px",
+                        color: "#f87171",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        cursor: "pointer",
+                      }}
                     >
-                      <Mic size={14} color="#ef4444" /> {text.trim().length === 0 ? "Record Voice Note" : "+ Voice Note"}
+                      <Mic size={14} color="#ef4444" /> Record Voice Note
                     </button>
                     <button
                       type="button"
-                      onClick={() => startCamera("environment")}
-                      className="btn btn-secondary"
-                      style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", border: "1px solid var(--accent-indigo)" }}
+                      onClick={() => {
+                        setCurrentStep(3);
+                        startCamera("environment");
+                      }}
+                      style={{
+                        background: "rgba(99, 102, 241, 0.12)",
+                        border: "1px solid rgba(99, 102, 241, 0.35)",
+                        borderRadius: 8,
+                        padding: "8px 14px",
+                        color: "#818cf8",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        cursor: "pointer",
+                      }}
                     >
-                      <Camera size={14} color="var(--accent-indigo)" /> 📸 Open Webcam / Live Camera
+                      <Camera size={14} color="#818cf8" /> Open Camera
                     </button>
                   </div>
 
@@ -1017,124 +1205,180 @@ export default function ReportPage() {
                     type="button"
                     onClick={() => {
                       if (!text.trim() && !editedTranscript && images.length === 0) {
-                        alert("Please write a description, record a voice note, or take a photo.");
+                        alert("Please enter a description, record a voice note, or take a photo.");
                         return;
                       }
                       setCurrentStep(2);
                     }}
-                    className="btn btn-primary"
-                    style={{ fontSize: 12, whiteSpace: "nowrap", marginLeft: "auto", padding: "8px 16px" }}
+                    style={{
+                      background: "linear-gradient(135deg, #4f46e5, #3b82f6)",
+                      border: "none",
+                      borderRadius: 8,
+                      padding: "9px 20px",
+                      color: "#ffffff",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      boxShadow: "0 4px 12px rgba(79,70,229,0.3)",
+                    }}
                   >
-                    Next: Voice Note →
+                    Next: Voice Note <ChevronRight size={14} />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Step 2: Voice Recording (Whisper) */}
+            {/* STEP 2: VOICE RECORDING (LOCAL WHISPER) */}
             {currentStep === 2 && (
-              <div style={{ background: "var(--brand-card)", border: "1px solid var(--brand-border)", borderRadius: 12, padding: 20, marginBottom: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+              <div
+                style={{
+                  backgroundColor: "#0d1424",
+                  border: "1px solid rgba(51, 65, 85, 0.6)",
+                  borderRadius: 14,
+                  padding: 24,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(239,68,68,0.15)", display: "flex", alignItems: "center", justifyContent: "center", color: "#f87171" }}>
+                    <Mic size={18} />
+                  </div>
                   <div>
-                    <h3 style={{ fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
-                      <Mic size={18} color="var(--accent-indigo)" />
-                      <span>Step 2: Voice Grievance Recording (Local Whisper STT)</span>
-                    </h3>
-                    <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-                      Speak naturally in Tamil, Tanglish, Hindi, or English. You can append the transcription to your written text or use it directly.
+                    <h2 style={{ fontSize: 16, fontWeight: 700, color: "#ffffff", margin: 0 }}>
+                      Step 2: Voice Grievance Note (Whisper STT)
+                    </h2>
+                    <p style={{ fontSize: 12, color: "#94a3b8", margin: "2px 0 0 0" }}>
+                      Speak in Tamil, Hindi, or English. Audio is converted to 16kHz WAV and transcribed locally.
                     </p>
                   </div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, margin: "20px 0" }}>
+                {/* Studio Recorder Centerpiece */}
+                <div
+                  style={{
+                    background: "#070b14",
+                    border: "1px solid rgba(51, 65, 85, 0.6)",
+                    borderRadius: 12,
+                    padding: "32px 20px",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 16,
+                    margin: "12px 0 20px",
+                  }}
+                >
                   {!isRecording ? (
                     <button
+                      type="button"
                       onClick={startRecording}
                       style={{
-                        width: 64,
-                        height: 64,
+                        width: 72,
+                        height: 72,
                         borderRadius: "50%",
-                        background: "#ef4444",
+                        background: "radial-gradient(circle, #ef4444, #b91c1c)",
+                        border: "3px solid #fecaca",
                         color: "#fff",
-                        border: "none",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         cursor: "pointer",
-                        boxShadow: "0 0 20px rgba(239,68,68,0.4)",
+                        boxShadow: "0 0 28px rgba(239,68,68,0.4)",
+                        transition: "transform 0.15s ease",
                       }}
-                      title="Click to start recording voice"
+                      title="Tap to speak"
                     >
-                      <Mic size={28} />
+                      <Mic size={32} />
                     </button>
                   ) : (
                     <button
+                      type="button"
                       onClick={stopRecording}
                       style={{
-                        width: 64,
-                        height: 64,
+                        width: 72,
+                        height: 72,
                         borderRadius: "50%",
                         background: "#1e293b",
-                        border: "2px solid #ef4444",
+                        border: "3px solid #ef4444",
                         color: "#ef4444",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         cursor: "pointer",
-                        animation: "pulse 1.5s infinite",
+                        boxShadow: "0 0 32px rgba(239,68,68,0.6)",
+                        animation: "pulse 1.2s infinite",
                       }}
-                      title="Click to stop recording"
+                      title="Tap to finish recording"
                     >
-                      <Square size={26} fill="#ef4444" />
+                      <Square size={28} fill="#ef4444" />
                     </button>
                   )}
 
-                  <div>
-                    <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "monospace", color: isRecording ? "#ef4444" : "var(--text-primary)" }}>
-                      {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, "0")}
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "monospace", color: isRecording ? "#f43f5e" : "#f1f5f9" }}>
+                      {Math.floor(recordingDuration / 60).toString().padStart(2, "0")}:{(recordingDuration % 60).toString().padStart(2, "0")}
                     </div>
-                    <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                      {isRecording ? "🔴 Recording live voice... Speak now" : audioBlob ? "Recording ready" : "Tap the red microphone to speak"}
-                    </span>
+                    <p style={{ fontSize: 12, color: isRecording ? "#fda4af" : "#94a3b8", margin: "4px 0 0 0" }}>
+                      {isRecording ? "🔴 Listening... Speak naturally now" : audioBlob ? "✓ Voice note ready for transcription" : "Tap the red microphone button to start recording"}
+                    </p>
                   </div>
                 </div>
 
                 {transcribing && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 12, background: "rgba(99,102,241,0.1)", borderRadius: 8, marginBottom: 14 }}>
-                    <Loader2 size={16} className="spin" color="var(--accent-indigo)" />
-                    <span style={{ fontSize: 12, color: "var(--accent-indigo)" }}>Running Whisper local speech-to-text recognition...</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 12, background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.25)", borderRadius: 8, marginBottom: 16 }}>
+                    <Loader2 size={16} className="spin" color="#818cf8" />
+                    <span style={{ fontSize: 12, color: "#818cf8", fontWeight: 500 }}>
+                      Transcribing speech with local Whisper model...
+                    </span>
                   </div>
                 )}
 
                 {transcriptionError && (
-                  <div style={{ padding: 10, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#ef4444", fontSize: 12, marginBottom: 14 }}>
+                  <div style={{ padding: 10, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#f87171", fontSize: 12, marginBottom: 16 }}>
                     ⚠ {transcriptionError}
                   </div>
                 )}
 
+                {/* Transcribed Output & Actions */}
                 {voiceTranscription && (
-                  <div style={{ background: "var(--brand-surface)", borderRadius: 10, padding: 14, marginBottom: 14, border: "1px solid var(--brand-border)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: "var(--accent-indigo)" }}>
-                        🎙 Transcribed ({voiceTranscription.language_name || "Tamil/English"})
+                  <div style={{ background: "#070b14", border: "1px solid rgba(51, 65, 85, 0.8)", borderRadius: 10, padding: 16, marginBottom: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#818cf8", textTransform: "uppercase" }}>
+                        🎙 Transcribed ({voiceTranscription.language_name || "Tamil / English"})
                       </span>
-                      <button onClick={resetRecording} className="btn-ghost" style={{ fontSize: 11, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
+                      <button
+                        type="button"
+                        onClick={resetRecording}
+                        style={{ background: "none", border: "none", color: "#94a3b8", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
+                      >
                         <RotateCcw size={12} /> Re-record
                       </button>
                     </div>
+
                     <textarea
-                      className="input"
                       value={editedTranscript}
                       onChange={(e) => {
                         setEditedTranscript(e.target.value);
                         triggerAutoAnalysis(e.target.value);
                       }}
-                      style={{ minHeight: 70, fontSize: 13 }}
+                      style={{
+                        width: "100%",
+                        minHeight: 70,
+                        backgroundColor: "transparent",
+                        border: "none",
+                        color: "#f8fafc",
+                        fontSize: 13,
+                        outline: "none",
+                        resize: "vertical",
+                        lineHeight: 1.5,
+                      }}
                       placeholder="Review or edit transcript..."
                     />
 
-                    {/* Quick action buttons for combining text & voice */}
-                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <div style={{ display: "flex", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(51, 65, 85, 0.4)" }}>
                       {text && text.trim().length > 0 && (
                         <button
                           type="button"
@@ -1142,12 +1386,19 @@ export default function ReportPage() {
                             const combined = `${text}\n${editedTranscript}`;
                             setText(combined);
                             triggerAutoAnalysis(combined);
-                            alert("Appended voice transcript to your written description.");
+                            alert("Appended voice transcript to your description.");
                           }}
-                          className="btn btn-secondary"
-                          style={{ fontSize: 11, padding: "4px 8px" }}
+                          style={{
+                            background: "rgba(255,255,255,0.06)",
+                            border: "1px solid rgba(255,255,255,0.12)",
+                            borderRadius: 6,
+                            padding: "6px 12px",
+                            fontSize: 11,
+                            color: "#e2e8f0",
+                            cursor: "pointer",
+                          }}
                         >
-                          ➕ Append to Written Text
+                          ➕ Append to Description
                         </button>
                       )}
                       <button
@@ -1156,8 +1407,15 @@ export default function ReportPage() {
                           setText(editedTranscript);
                           triggerAutoAnalysis(editedTranscript);
                         }}
-                        className="btn btn-secondary"
-                        style={{ fontSize: 11, padding: "4px 8px" }}
+                        style={{
+                          background: "rgba(99, 102, 241, 0.15)",
+                          border: "1px solid rgba(99, 102, 241, 0.3)",
+                          borderRadius: 6,
+                          padding: "6px 12px",
+                          fontSize: 11,
+                          color: "#818cf8",
+                          cursor: "pointer",
+                        }}
                       >
                         🔄 Set as Main Description
                       </button>
@@ -1165,133 +1423,110 @@ export default function ReportPage() {
                   </div>
                 )}
 
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                  <button onClick={() => setCurrentStep(1)} className="btn btn-ghost" style={{ fontSize: 12 }}>
-                    ← Back to Description
+                {/* Step 2 Actions Bar */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 20, paddingTop: 16, borderTop: "1px solid rgba(51, 65, 85, 0.4)" }}>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(1)}
+                    style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "8px 16px", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}
+                  >
+                    ← Back
                   </button>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    {!voiceTranscription && (
-                      <button onClick={() => setCurrentStep(3)} className="btn btn-secondary" style={{ fontSize: 12 }}>
-                        Skip Voice →
-                      </button>
-                    )}
-                    <button
-                      onClick={() => {
-                        if (!text.trim() && !editedTranscript && !audioId) {
-                          alert("Please enter a description or record a voice note first.");
-                          return;
-                        }
-                        setCurrentStep(3);
-                      }}
-                      className="btn btn-primary"
-                      style={{ fontSize: 12 }}
-                    >
-                      Next: Evidence (Optional) →
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(3)}
+                    style={{
+                      background: "linear-gradient(135deg, #4f46e5, #3b82f6)",
+                      border: "none",
+                      borderRadius: 8,
+                      padding: "9px 20px",
+                      color: "#ffffff",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    Next: Photo Evidence <ChevronRight size={14} />
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* Step 3: Photo Evidence (Optional) */}
+            {/* STEP 3: PHOTO EVIDENCE & CAMERA */}
             {currentStep === 3 && (
-              <div style={{ background: "var(--brand-card)", border: "1px solid var(--brand-border)", borderRadius: 12, padding: 20, marginBottom: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+              <div
+                style={{
+                  backgroundColor: "#0d1424",
+                  border: "1px solid rgba(51, 65, 85, 0.6)",
+                  borderRadius: 14,
+                  padding: 24,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(34, 211, 238, 0.15)", display: "flex", alignItems: "center", justifyContent: "center", color: "#22d3ee" }}>
+                    <ImageIcon size={18} />
+                  </div>
                   <div>
-                    <h3 style={{ fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
-                      <ImageIcon size={18} color="var(--accent-indigo)" />
-                      <span>Step 3: Photo Evidence (Optional Feature)</span>
-                    </h3>
-                    <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-                      You can optionally attach photos of potholes, fallen wires, waterlogging, or overflowing garbage for grounded AI vision verification.
+                    <h2 style={{ fontSize: 16, fontWeight: 700, color: "#ffffff", margin: 0 }}>
+                      Step 3: Photo Evidence (Optional)
+                    </h2>
+                    <p style={{ fontSize: 12, color: "#94a3b8", margin: "2px 0 0 0" }}>
+                      Attach photos of potholes, fallen wires, or garbage for local Qwen2.5-VL vision analysis.
                     </p>
                   </div>
                 </div>
 
-                {/* Dual Capture Options: Live Camera or File Upload */}
+                {/* Dual Option Cards */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-                  {/* Option 1: Live Camera */}
                   <button
                     type="button"
                     onClick={() => startCamera("environment")}
                     disabled={uploadingImage}
                     style={{
-                      padding: 20,
-                      border: "2px dashed var(--accent-indigo)",
+                      padding: "24px 16px",
+                      border: "2px dashed rgba(99, 102, 241, 0.4)",
                       borderRadius: 12,
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "center",
                       justifyContent: "center",
                       cursor: "pointer",
-                      background: "rgba(99, 102, 241, 0.08)",
-                      color: "var(--text-primary)",
-                      transition: "all 0.2s ease",
+                      background: "rgba(99, 102, 241, 0.06)",
+                      color: "#f8fafc",
                     }}
                   >
-                    <div
-                      style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: "50%",
-                        background: "rgba(99, 102, 241, 0.2)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        marginBottom: 8,
-                        color: "var(--accent-indigo)",
-                      }}
-                    >
+                    <div style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(99, 102, 241, 0.2)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8, color: "#818cf8" }}>
                       <Camera size={22} />
                     </div>
-                    <span style={{ fontSize: 13, fontWeight: 700 }}>
-                      📸 Open Camera
-                    </span>
-                    <span style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                      Live photo capture
-                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 700 }}>📸 Open Camera</span>
+                    <span style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>Laptop or Phone Cam</span>
                   </button>
 
-                  {/* Option 2: File Upload */}
                   <label
                     style={{
-                      padding: 20,
-                      border: "2px dashed var(--brand-border)",
+                      padding: "24px 16px",
+                      border: "2px dashed rgba(51, 65, 85, 0.8)",
                       borderRadius: 12,
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "center",
                       justifyContent: "center",
                       cursor: "pointer",
-                      background: "rgba(255,255,255,0.02)",
-                      transition: "all 0.2s ease",
+                      background: "rgba(255, 255, 255, 0.02)",
                     }}
                   >
-                    <div
-                      style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: "50%",
-                        background: "rgba(34, 211, 238, 0.15)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        marginBottom: 8,
-                        color: "var(--accent-cyan)",
-                      }}
-                    >
+                    <div style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(34, 211, 238, 0.15)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8, color: "#22d3ee" }}>
                       <ImageIcon size={22} />
                     </div>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>
-                      📁 Upload Photo
-                    </span>
-                    <span style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                      Select JPEG / PNG
-                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc" }}>📁 Upload Photo</span>
+                    <span style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>JPEG or PNG</span>
                     <input
                       type="file"
                       accept="image/*"
-                      capture="environment"
                       onChange={handleImageSelect}
                       style={{ display: "none" }}
                       disabled={uploadingImage}
@@ -1300,23 +1535,24 @@ export default function ReportPage() {
                 </div>
 
                 {uploadingImage && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 12, background: "rgba(99,102,241,0.1)", borderRadius: 10, marginBottom: 14 }}>
-                    <Loader2 size={16} className="spin" color="var(--accent-indigo)" />
-                    <span style={{ fontSize: 12, color: "var(--accent-indigo)" }}>Analyzing hazard & severity with local Qwen2.5-VL vision model...</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 12, background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.25)", borderRadius: 8, marginBottom: 16 }}>
+                    <Loader2 size={16} className="spin" color="#818cf8" />
+                    <span style={{ fontSize: 12, color: "#818cf8" }}>
+                      Analyzing visual hazard & severity with local Qwen2.5-VL...
+                    </span>
                   </div>
                 )}
 
-                {/* Hidden canvas for snapshot rendering */}
                 <canvas ref={canvasRef} style={{ display: "none" }} />
 
-                {/* Live Camera Viewfinder Modal */}
+                {/* Viewfinder Modal */}
                 {isCameraOpen && (
                   <div
                     style={{
                       position: "fixed",
                       inset: 0,
-                      background: "rgba(0, 0, 0, 0.85)",
-                      backdropFilter: "blur(6px)",
+                      background: "rgba(0, 0, 0, 0.88)",
+                      backdropFilter: "blur(8px)",
                       zIndex: 100,
                       display: "flex",
                       flexDirection: "column",
@@ -1329,16 +1565,16 @@ export default function ReportPage() {
                       style={{
                         maxWidth: 540,
                         width: "100%",
-                        background: "#0f172a",
+                        background: "#0c1322",
                         borderRadius: 16,
                         border: "1px solid #334155",
                         overflow: "hidden",
-                        boxShadow: "0 25px 50px -12px rgba(0,0,0,0.7)",
+                        boxShadow: "0 25px 50px rgba(0,0,0,0.8)",
                       }}
                     >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid #1e293b" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid #1e293b" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <Camera size={18} color="var(--accent-indigo)" />
+                          <Camera size={18} color="#818cf8" />
                           <span style={{ fontSize: 14, fontWeight: 700, color: "#f8fafc" }}>Civic Camera Viewfinder</span>
                         </div>
                         <button
@@ -1358,11 +1594,10 @@ export default function ReportPage() {
                           muted
                           style={{ width: "100%", height: "100%", objectFit: "cover" }}
                         />
-                        {/* Target Grid overlay */}
                         <div
                           style={{
                             position: "absolute",
-                            inset: 20,
+                            inset: 24,
                             border: "1.5px dashed rgba(255,255,255,0.4)",
                             borderRadius: 12,
                             pointerEvents: "none",
@@ -1370,33 +1605,31 @@ export default function ReportPage() {
                         />
                       </div>
 
-                      <div style={{ padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center", background: "#090d16" }}>
+                      <div style={{ padding: 18, display: "flex", justifyContent: "space-between", alignItems: "center", background: "#070b14" }}>
                         <button
                           type="button"
                           onClick={switchCamera}
-                          className="btn btn-secondary"
-                          style={{ fontSize: 12, padding: "8px 12px", display: "flex", alignItems: "center", gap: 6 }}
+                          style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#e2e8f0", borderRadius: 8, fontSize: 12, padding: "8px 14px", display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
                         >
-                          <RotateCcw size={14} /> Flip
+                          <RotateCcw size={14} /> Flip Camera
                         </button>
 
                         <button
                           type="button"
                           onClick={capturePhotoFromCamera}
                           style={{
-                            width: 58,
-                            height: 58,
+                            width: 60,
+                            height: 60,
                             borderRadius: "50%",
                             background: "radial-gradient(circle, #22d3ee, #0284c7)",
                             border: "4px solid #ffffff",
-                            boxShadow: "0 0 20px rgba(34,211,238,0.6)",
+                            boxShadow: "0 0 24px rgba(34,211,238,0.6)",
                             cursor: "pointer",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            transition: "transform 0.1s ease",
                           }}
-                          title="Take Photo"
+                          title="Capture Snapshot"
                         >
                           <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#ffffff" }} />
                         </button>
@@ -1404,8 +1637,7 @@ export default function ReportPage() {
                         <button
                           type="button"
                           onClick={stopCamera}
-                          className="btn btn-ghost"
-                          style={{ fontSize: 12, padding: "8px 12px" }}
+                          style={{ background: "none", border: "none", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}
                         >
                           Cancel
                         </button>
@@ -1415,12 +1647,12 @@ export default function ReportPage() {
                 )}
 
                 {imageError && (
-                  <div style={{ padding: 10, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#ef4444", fontSize: 12, marginBottom: 14 }}>
+                  <div style={{ padding: 10, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#f87171", fontSize: 12, marginBottom: 14 }}>
                     ⚠ {imageError}
                   </div>
                 )}
 
-                {/* Images List */}
+                {/* Attached Images List */}
                 {images.length > 0 && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
                     {images.map((img, idx) => (
@@ -1430,174 +1662,318 @@ export default function ReportPage() {
                           display: "flex",
                           gap: 12,
                           alignItems: "center",
-                          background: "var(--brand-surface)",
+                          background: "#070b14",
                           borderRadius: 10,
                           padding: 10,
-                          border: "1px solid var(--brand-border)",
+                          border: "1px solid rgba(51, 65, 85, 0.6)",
                         }}
                       >
-                        <img src={img.previewUrl} alt="Evidence" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6 }} />
+                        <img src={img.previewUrl} alt="Evidence" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8 }} />
                         <div style={{ flex: 1 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: "#fff" }}>
-                              {img.analysis?.evidence_category?.replace("_", " ") || "Image Evidence"}
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>
+                              {img.analysis?.evidence_category?.replace("_", " ") || "Photo Evidence"}
                             </span>
                             <span style={{ fontSize: 10, background: "rgba(99,102,241,0.2)", color: "#818cf8", padding: "1px 6px", borderRadius: 4 }}>
                               {Math.round((img.analysis?.confidence || 0.85) * 100)}% vision conf
                             </span>
                           </div>
-                          <p style={{ fontSize: 11, color: "var(--text-secondary)", margin: 0, lineHeight: 1.4 }}>
-                            {img.analysis?.observations?.[0] || "Visual evidence attached."}
+                          <p style={{ fontSize: 11, color: "#94a3b8", margin: 0 }}>
+                            {img.analysis?.observations?.[0] || "Photo attached successfully."}
                           </p>
                         </div>
-                        <button onClick={() => removeImage(idx)} className="btn-ghost" style={{ color: "#ef4444", padding: 6 }}>
-                          <Trash2 size={14} />
+                        <button
+                          type="button"
+                          onClick={() => removeImage(idx)}
+                          style={{ background: "none", border: "none", color: "#ef4444", padding: 6, cursor: "pointer" }}
+                        >
+                          <Trash2 size={16} />
                         </button>
                       </div>
                     ))}
                   </div>
                 )}
 
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <button onClick={() => setCurrentStep(2)} className="btn btn-ghost" style={{ fontSize: 12 }}>
-                    ← Back to Voice
+                {/* Step 3 Actions Bar */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 20, paddingTop: 16, borderTop: "1px solid rgba(51, 65, 85, 0.4)" }}>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(2)}
+                    style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "8px 16px", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}
+                  >
+                    ← Back
                   </button>
-                  <button onClick={() => setCurrentStep(4)} className="btn btn-primary" style={{ fontSize: 12 }}>
-                    {images.length > 0 ? "Next: Location Tagging →" : "Skip Evidence & Next: Location →"}
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(4)}
+                    style={{
+                      background: "linear-gradient(135deg, #4f46e5, #3b82f6)",
+                      border: "none",
+                      borderRadius: 8,
+                      padding: "9px 20px",
+                      color: "#ffffff",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    Next: Ward & Location <ChevronRight size={14} />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Step 4: Location */}
+            {/* STEP 4: LOCATION & WARD */}
             {currentStep === 4 && (
-              <div style={{ background: "var(--brand-card)", border: "1px solid var(--brand-border)", borderRadius: 12, padding: 20, marginBottom: 16 }}>
-                <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
-                  <MapPin size={18} color="var(--accent-indigo)" />
-                  <span>Step 4: Location & Spatial Tagging</span>
-                </h3>
-                <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14 }}>
-                  Pinpoint your ward or locality in Chennai for accurate municipal routing.
-                </p>
+              <div
+                style={{
+                  backgroundColor: "#0d1424",
+                  border: "1px solid rgba(51, 65, 85, 0.6)",
+                  borderRadius: 14,
+                  padding: 24,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(34, 197, 94, 0.15)", display: "flex", alignItems: "center", justifyContent: "center", color: "#4ade80" }}>
+                    <MapPin size={18} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: 16, fontWeight: 700, color: "#ffffff", margin: 0 }}>
+                      Step 4: Locality & Ward Geotagging
+                    </h2>
+                    <p style={{ fontSize: 12, color: "#94a3b8", margin: "2px 0 0 0" }}>
+                      Tag your municipal ward or auto-detect live GPS for spatial incident routing.
+                    </p>
+                  </div>
+                </div>
 
-                <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+                {/* Location Search Bar + GPS Trigger */}
+                <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
                   <input
-                    className="input"
                     value={locationText}
                     onChange={(e) => setLocationText(e.target.value)}
-                    placeholder="e.g. Ward 112, Ranganathan Street, T. Nagar, Chennai"
-                    style={{ flex: 1, fontSize: 13 }}
+                    placeholder="Enter street, landmark, or ward name (e.g. Ward 112, T. Nagar)..."
+                    style={{
+                      flex: 1,
+                      backgroundColor: "#070b14",
+                      border: "1px solid rgba(51, 65, 85, 0.8)",
+                      borderRadius: 8,
+                      padding: "10px 14px",
+                      color: "#f8fafc",
+                      fontSize: 13,
+                      outline: "none",
+                    }}
                   />
                   <button
+                    type="button"
                     onClick={() => handleDetectGPS(true)}
-                    className="btn btn-secondary"
-                    style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}
+                    style={{
+                      background: "rgba(34, 197, 94, 0.15)",
+                      border: "1px solid rgba(34, 197, 94, 0.35)",
+                      borderRadius: 8,
+                      padding: "10px 16px",
+                      color: "#4ade80",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      whiteSpace: "nowrap",
+                    }}
                   >
-                    <Navigation size={13} className={gpsStatus === "detecting" ? "spin" : ""} />
+                    <Navigation size={14} className={gpsStatus === "detecting" ? "spin" : ""} />
                     Auto GPS
                   </button>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <button onClick={() => setCurrentStep(3)} className="btn btn-ghost" style={{ fontSize: 12 }}>
-                    ← Back to Evidence
+                {/* Quick Ward Chips */}
+                <div style={{ marginBottom: 20 }}>
+                  <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, display: "block", marginBottom: 8 }}>
+                    Quick-select Chennai Wards:
+                  </span>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {PRESET_LOCALITIES.map((p, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleSelectPreset(p)}
+                        style={{
+                          background: locationText === p.name ? "rgba(99, 102, 241, 0.2)" : "rgba(255,255,255,0.04)",
+                          border: locationText === p.name ? "1px solid #6366f1" : "1px solid rgba(255,255,255,0.1)",
+                          borderRadius: 6,
+                          padding: "6px 10px",
+                          fontSize: 11,
+                          color: locationText === p.name ? "#ffffff" : "#94a3b8",
+                          cursor: "pointer",
+                        }}
+                      >
+                        📍 {p.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* GPS Status Indicator */}
+                {latitude && longitude && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(34, 197, 94, 0.08)", border: "1px solid rgba(34, 197, 94, 0.2)", borderRadius: 6, fontSize: 11, color: "#4ade80" }}>
+                    <CheckCircle size={14} />
+                    <span>Coordinates Geotagged: {latitude.toFixed(5)}° N, {longitude.toFixed(5)}° E</span>
+                  </div>
+                )}
+
+                {/* Step 4 Actions Bar */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 20, paddingTop: 16, borderTop: "1px solid rgba(51, 65, 85, 0.4)" }}>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(3)}
+                    style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "8px 16px", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}
+                  >
+                    ← Back
                   </button>
-                  <button onClick={handleAnalyze} disabled={analyzing} className="btn btn-primary" style={{ fontSize: 12 }}>
+                  <button
+                    type="button"
+                    onClick={handleAnalyze}
+                    disabled={analyzing}
+                    style={{
+                      background: "linear-gradient(135deg, #4f46e5, #3b82f6)",
+                      border: "none",
+                      borderRadius: 8,
+                      padding: "9px 20px",
+                      color: "#ffffff",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
                     {analyzing ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}
-                    {analyzing ? "Analyzing Multimodal Signals..." : "Review AI Understanding →"}
+                    {analyzing ? "Synthesizing AI Triage..." : "Review AI Dispatch →"}
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Step 5: AI Understanding Preview & Confirmation */}
+            {/* STEP 5: AI REVIEW & SUBMISSION */}
             {currentStep === 5 && (
-              <div style={{ background: "var(--brand-card)", border: "1px solid var(--accent-indigo)", borderRadius: 12, padding: 20, marginBottom: 16 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
-                  <FileCheck size={20} color="var(--accent-indigo)" />
-                  <span>Step 5: CivicMind AI Pre-Submission Understanding</span>
-                </h3>
-                <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>
-                  Review the unified interpretation produced by MuRIL v1.1 and Qwen3-VL before dispatch.
-                </p>
+              <div
+                style={{
+                  backgroundColor: "#0d1424",
+                  border: "1px solid rgba(99, 102, 241, 0.4)",
+                  borderRadius: 14,
+                  padding: 24,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(99,102,241,0.15)", display: "flex", alignItems: "center", justifyContent: "center", color: "#818cf8" }}>
+                    <FileCheck size={18} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: 16, fontWeight: 700, color: "#ffffff", margin: 0 }}>
+                      Step 5: Pre-Submission Review & Dispatch
+                    </h2>
+                    <p style={{ fontSize: 12, color: "#94a3b8", margin: "2px 0 0 0" }}>
+                      Verify the unified multimodal interpretation before municipal ticket generation.
+                    </p>
+                  </div>
+                </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 20 }}>
                   {/* Grievance Statement */}
-                  <div style={{ background: "var(--brand-surface)", padding: 14, borderRadius: 8, border: "1px solid var(--brand-border)" }}>
-                    <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>Grievance Statement</span>
-                    <p style={{ fontSize: 13, color: "var(--text-primary)", marginTop: 4, fontWeight: 500, lineHeight: 1.5 }}>
-                      "{editedTranscript || text || "Grievance submitted with media evidence."}"
+                  <div style={{ background: "#070b14", padding: 14, borderRadius: 8, border: "1px solid rgba(51, 65, 85, 0.6)" }}>
+                    <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, textTransform: "uppercase" }}>Grievance Statement</span>
+                    <p style={{ fontSize: 13, color: "#f8fafc", marginTop: 4, fontWeight: 500, lineHeight: 1.5 }}>
+                      "{editedTranscript || text || "Citizen grievance with attached media evidence."}"
                     </p>
                   </div>
 
-                  {/* AI Understanding Breakdown */}
+                  {/* AI Classification Summary */}
                   {analysis && (
-                    <div style={{ background: "var(--brand-surface)", padding: 14, borderRadius: 8, border: "1px solid var(--brand-border)" }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                    <div style={{ background: "#070b14", padding: 14, borderRadius: 8, border: "1px solid rgba(51, 65, 85, 0.6)" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                         <div>
-                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Classified Category</span>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", textTransform: "capitalize", marginTop: 2 }}>
+                          <span style={{ fontSize: 11, color: "#94a3b8" }}>Classified Category</span>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#ffffff", textTransform: "capitalize", marginTop: 2 }}>
                             {analysis.category}
                           </div>
                         </div>
                         <div>
-                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Target Priority & SLA</span>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: analysis.priority === "critical" ? "#ef4444" : "#f59e0b", marginTop: 2 }}>
+                          <span style={{ fontSize: 11, color: "#94a3b8" }}>Priority & Target SLA</span>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: analysis.priority === "critical" ? "#f43f5e" : "#fbbf24", marginTop: 2 }}>
                             {analysis.priority.toUpperCase()} ({analysis.sla?.target_sla_hours || 24}h SLA)
                           </div>
                         </div>
                         <div>
-                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Routed Department</span>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginTop: 2 }}>
+                          <span style={{ fontSize: 11, color: "#94a3b8" }}>Routed Department</span>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "#cbd5e1", marginTop: 2 }}>
                             {analysis.department_name}
                           </div>
                         </div>
                         <div>
-                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Detected Language</span>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginTop: 2 }}>
+                          <span style={{ fontSize: 11, color: "#94a3b8" }}>Language & Script</span>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "#cbd5e1", marginTop: 2 }}>
                             {analysis.language_name} ({analysis.script})
                           </div>
                         </div>
                       </div>
 
                       {analysis.decision_details?.is_immediate_hazard && (
-                        <div style={{ padding: "8px 12px", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, display: "flex", alignItems: "center", gap: 8, color: "#ef4444", fontSize: 12 }}>
+                        <div style={{ marginTop: 12, padding: "8px 12px", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, display: "flex", alignItems: "center", gap: 8, color: "#f87171", fontSize: 12 }}>
                           <ShieldAlert size={16} />
-                          <span>Immediate safety hazard flagged. Priority escalated to CRITICAL.</span>
+                          <span>Immediate safety hazard flagged. Escalated to CRITICAL SLA response.</span>
                         </div>
                       )}
                     </div>
                   )}
-
-                  {/* Visual Evidence Summary */}
-                  {images.length > 0 && (
-                    <div style={{ background: "var(--brand-surface)", padding: 14, borderRadius: 8, border: "1px solid var(--brand-border)" }}>
-                      <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>Visual Evidence (Qwen3-VL 4B)</span>
-                      <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 8 }}>
-                        <img src={images[0]?.previewUrl} alt="Evidence" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6 }} />
-                        <div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>
-                              {images[0]?.analysis?.evidence_category}
-                            </span>
-                            <span style={{ fontSize: 10, background: "rgba(99,102,241,0.2)", color: "#818cf8", padding: "1px 6px", borderRadius: 4 }}>
-                              {Math.round((images[0]?.analysis?.confidence || 0.85) * 100)}% conf
-                            </span>
-                          </div>
-                          <p style={{ fontSize: 11, color: "var(--text-secondary)", margin: 0 }}>
-                            {images[0]?.analysis?.observations?.[0] || "Visual evidence attached."}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button onClick={() => setCurrentStep(4)} className="btn btn-secondary" style={{ flex: 1, fontSize: 13 }}>
+                {/* Step 5 Submission Action Bar */}
+                <div style={{ display: "flex", gap: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(4)}
+                    style={{
+                      flex: 1,
+                      background: "rgba(255,255,255,0.06)",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: 8,
+                      padding: "12px",
+                      color: "#cbd5e1",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
                     ← Edit Details
                   </button>
-                  <button onClick={handleSubmit} disabled={submitting} className="btn btn-primary" style={{ flex: 1.5, fontSize: 14, padding: "12px" }}>
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    style={{
+                      flex: 1.8,
+                      background: "linear-gradient(135deg, #4f46e5, #3b82f6)",
+                      border: "none",
+                      borderRadius: 8,
+                      padding: "12px 20px",
+                      color: "#ffffff",
+                      fontSize: 14,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      boxShadow: "0 4px 16px rgba(79,70,229,0.4)",
+                    }}
+                  >
                     {submitting ? <Loader2 size={16} className="spin" /> : <Send size={16} />}
                     {submitting ? "Submitting to Municipal Authorities..." : "Confirm & Submit Grievance"}
                   </button>
@@ -1606,18 +1982,32 @@ export default function ReportPage() {
             )}
           </div>
 
-          {/* AI Preview panel side */}
-          <div style={{ flex: 1, maxWidth: 420, position: "sticky", top: 24 }}>
+          {/* Right Column: Live Multimodal AI Intelligence */}
+          <div style={{ position: "sticky", top: 24 }}>
             <div style={{ marginBottom: 12 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Live Multimodal Intelligence</h3>
-              <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                MuRIL v1.1 + Qwen3-VL 4B + Local Whisper
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                <Sparkles size={14} color="#818cf8" />
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#ffffff" }}>Live AI Triage Stream</span>
+              </div>
+              <p style={{ fontSize: 11, color: "#94a3b8", margin: 0 }}>
+                MuRIL Multi-Task NLP + Qwen2.5-VL Vision + Whisper STT
               </p>
             </div>
-            <AIAnalysisPanel analysis={analysis || undefined} isLoading={analyzing} isMock={false} />
+
+            <div
+              style={{
+                backgroundColor: "#0d1424",
+                border: "1px solid rgba(51, 65, 85, 0.6)",
+                borderRadius: 14,
+                padding: 16,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+              }}
+            >
+              <AIAnalysisPanel analysis={analysis || undefined} isLoading={analyzing} isMock={false} />
+            </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
