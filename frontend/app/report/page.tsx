@@ -70,6 +70,13 @@ export default function ReportPage() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
 
+  // Live Camera Viewfinder State
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
   // AI Pipeline state
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<AIAnalysisResult | null>(null);
@@ -232,12 +239,10 @@ export default function ReportPage() {
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Image Upload Functions
+  // Image Upload & Live Camera Capture Functions
   // ─────────────────────────────────────────────────────────────────────────────
-  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
+  const processImageFile = async (file: File) => {
     setImageError(null);
-    const file = e.target.files[0];
     const previewUrl = URL.createObjectURL(file);
 
     setUploadingImage(true);
@@ -276,6 +281,65 @@ export default function ReportPage() {
     } finally {
       setUploadingImage(false);
     }
+  };
+
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    await processImageFile(file);
+  };
+
+  const startCamera = async (mode: "environment" | "user" = facingMode) => {
+    try {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
+      setIsCameraOpen(true);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+    } catch (err: any) {
+      alert("Camera access was denied or is not supported by your browser: " + (err.message || err));
+      setIsCameraOpen(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setIsCameraOpen(false);
+  };
+
+  const switchCamera = () => {
+    const nextMode = facingMode === "environment" ? "user" : "environment";
+    setFacingMode(nextMode);
+    startCamera(nextMode);
+  };
+
+  const capturePhotoFromCamera = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const file = new File([blob], `civic-evidence-${Date.now()}.jpg`, { type: "image/jpeg" });
+      stopCamera();
+      await processImageFile(file);
+    }, "image/jpeg", 0.92);
   };
 
   const removeImage = (index: number) => {
@@ -1137,31 +1201,211 @@ export default function ReportPage() {
                   </div>
                 </div>
 
-                <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+                {/* Dual Capture Options: Live Camera or File Upload */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+                  {/* Option 1: Live Camera */}
+                  <button
+                    type="button"
+                    onClick={() => startCamera("environment")}
+                    disabled={uploadingImage}
+                    style={{
+                      padding: 20,
+                      border: "2px dashed var(--accent-indigo)",
+                      borderRadius: 12,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                      background: "rgba(99, 102, 241, 0.08)",
+                      color: "var(--text-primary)",
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: "50%",
+                        background: "rgba(99, 102, 241, 0.2)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginBottom: 8,
+                        color: "var(--accent-indigo)",
+                      }}
+                    >
+                      <Camera size={22} />
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 700 }}>
+                      📸 Open Camera
+                    </span>
+                    <span style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                      Live photo capture
+                    </span>
+                  </button>
+
+                  {/* Option 2: File Upload */}
                   <label
                     style={{
-                      flex: 1,
-                      padding: 24,
+                      padding: 20,
                       border: "2px dashed var(--brand-border)",
-                      borderRadius: 10,
+                      borderRadius: 12,
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "center",
                       justifyContent: "center",
                       cursor: "pointer",
                       background: "rgba(255,255,255,0.02)",
+                      transition: "all 0.2s ease",
                     }}
                   >
-                    <Camera size={28} color="var(--accent-indigo)" style={{ marginBottom: 6 }} />
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>
-                      {uploadingImage ? "Analyzing with Qwen3-VL..." : "+ Upload Photo Evidence (Optional)"}
+                    <div
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: "50%",
+                        background: "rgba(34, 211, 238, 0.15)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginBottom: 8,
+                        color: "var(--accent-cyan)",
+                      }}
+                    >
+                      <ImageIcon size={22} />
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>
+                      📁 Upload Photo
                     </span>
                     <span style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                      JPEG, PNG, WebP (up to 15MB)
+                      Select JPEG / PNG
                     </span>
-                    <input type="file" accept="image/*" onChange={handleImageSelect} style={{ display: "none" }} disabled={uploadingImage} />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleImageSelect}
+                      style={{ display: "none" }}
+                      disabled={uploadingImage}
+                    />
                   </label>
                 </div>
+
+                {uploadingImage && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 12, background: "rgba(99,102,241,0.1)", borderRadius: 10, marginBottom: 14 }}>
+                    <Loader2 size={16} className="spin" color="var(--accent-indigo)" />
+                    <span style={{ fontSize: 12, color: "var(--accent-indigo)" }}>Analyzing hazard & severity with local Qwen2.5-VL vision model...</span>
+                  </div>
+                )}
+
+                {/* Hidden canvas for snapshot rendering */}
+                <canvas ref={canvasRef} style={{ display: "none" }} />
+
+                {/* Live Camera Viewfinder Modal */}
+                {isCameraOpen && (
+                  <div
+                    style={{
+                      position: "fixed",
+                      inset: 0,
+                      background: "rgba(0, 0, 0, 0.85)",
+                      backdropFilter: "blur(6px)",
+                      zIndex: 100,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: 16,
+                    }}
+                  >
+                    <div
+                      style={{
+                        maxWidth: 540,
+                        width: "100%",
+                        background: "#0f172a",
+                        borderRadius: 16,
+                        border: "1px solid #334155",
+                        overflow: "hidden",
+                        boxShadow: "0 25px 50px -12px rgba(0,0,0,0.7)",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid #1e293b" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <Camera size={18} color="var(--accent-indigo)" />
+                          <span style={{ fontSize: 14, fontWeight: 700, color: "#f8fafc" }}>Civic Camera Viewfinder</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={stopCamera}
+                          style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 16 }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <div style={{ position: "relative", background: "#000", aspectRatio: "4/3", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                        {/* Target Grid overlay */}
+                        <div
+                          style={{
+                            position: "absolute",
+                            inset: 20,
+                            border: "1.5px dashed rgba(255,255,255,0.4)",
+                            borderRadius: 12,
+                            pointerEvents: "none",
+                          }}
+                        />
+                      </div>
+
+                      <div style={{ padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center", background: "#090d16" }}>
+                        <button
+                          type="button"
+                          onClick={switchCamera}
+                          className="btn btn-secondary"
+                          style={{ fontSize: 12, padding: "8px 12px", display: "flex", alignItems: "center", gap: 6 }}
+                        >
+                          <RotateCcw size={14} /> Flip
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={capturePhotoFromCamera}
+                          style={{
+                            width: 58,
+                            height: 58,
+                            borderRadius: "50%",
+                            background: "radial-gradient(circle, #22d3ee, #0284c7)",
+                            border: "4px solid #ffffff",
+                            boxShadow: "0 0 20px rgba(34,211,238,0.6)",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            transition: "transform 0.1s ease",
+                          }}
+                          title="Take Photo"
+                        >
+                          <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#ffffff" }} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={stopCamera}
+                          className="btn btn-ghost"
+                          style={{ fontSize: 12, padding: "8px 12px" }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {imageError && (
                   <div style={{ padding: 10, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#ef4444", fontSize: 12, marginBottom: 14 }}>

@@ -3,10 +3,13 @@
 ## 1. Overview & Architecture
 CivicMind AI has been enhanced into a full-lifecycle municipal grievance redressal system with dual-mode citizen and admin workflows:
 - **Role-Based Entry**:
-  - `/` defaults to the **Citizen Public Portal** (Hero, Quick Complaint ID Search / Tracker, Feature Highlights, and Direct Links to report and officer login).
+  - `/` defaults to the **Citizen Public Portal** (Hero, Dual-Action Core for Instant Report & Tracking, Real-Time Civic Metrics, 4-Step Redressal Guide, Municipal Category Shortcuts, Live Public Grievance Feed, and 24x7 Helplines).
   - `/admin/login` provides dedicated municipal admin authentication with pre-filled demo chips (`admin` / `civicmind2026`).
   - `/command-center`, `/complaints`, `/incidents`, `/map`, `/sla`, `/audit`, `/ai-insights` are protected admin operational surfaces.
   - Persistent `+ Submit Test Complaint` button in the admin sidebar allows officers/evaluators to test the citizen flow without logging out.
+- **Live In-Browser Camera Capture & Multimodal AI Vision**:
+  - Step 3 on [`/report`](file:///c:/Users/jsaak/OneDrive/Desktop/Coding/CivicMindAI/frontend/app/report/page.tsx) provides both **`📸 Open Camera`** (with HTML5 viewfinder, flip camera, live video stream, and snap-to-canvas) and **`📁 Upload Photo`** (file picker with `capture="environment"`).
+  - Images are analyzed by local `qwen2.5vl:7b` for hazard detection, evidence categorization, and severity estimation.
 - **9-Stage Redressal Lifecycle**:
   `SUBMITTED` → `AI_ANALYSIS` → `TRIAGED` → `ROUTED` → `ASSIGNED` → `IN_PROGRESS` → `FIELD_VERIFICATION` → `RESOLVED` → `CLOSED` (+ `REOPENED`).
 - **Citizen Grievance Tracking (`/track` & `/track/[id]`)**:
@@ -30,10 +33,10 @@ CivicMind AI has been enhanced into a full-lifecycle municipal grievance redress
 
 | Route | Purpose | Access |
 |---|---|---|
-| `/` | Citizen Complaint Portal Landing | Public |
+| `/` | Citizen Complaint Portal (Hero, Live Metrics, 4-Step Flow, Categories, Helplines) | Public |
 | `/track` | Citizen Complaint Search & Recent Grievances | Public |
 | `/track/[id]` | Real-Time 9-Stage Stepper, Resolution Proof, and Reopen Confirmation | Public |
-| `/report` | Multimodal Filing (Whisper voice, Qwen2.5-VL photos, GPS, PDF receipt) | Public |
+| `/report` | Multimodal Filing (Live Camera Viewfinder, Whisper voice, Qwen-VL, GPS, PDF receipt) | Public |
 | `/admin/login` | Officer / Admin Login (`admin` / `civicmind2026`) | Public |
 | `/command-center` | Real-Time KPI Cards, Critical Alerts, Emerging Incidents, and Health | Admin |
 | `/complaints/[id]` | Case Management, Override, Status Stepper & Geofenced Resolution Modal | Admin |
