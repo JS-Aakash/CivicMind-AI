@@ -1,0 +1,24 @@
+{
+  "initial_train_samples": 11937,
+  "augmented_train_samples": 14367,
+  "augmented_val_samples": 1756,
+  "test_samples_untouched": 1494,
+  "challenge_samples_untouched": 750,
+  "added_augmented_samples": 2700,
+  "breakdown": {
+    "short_tanglish": 600,
+    "short_hinglish": 600,
+    "multi_issue_compound": 600,
+    "adversarial_inquiries": 400,
+    "contrastive_pairs": 500
+  },
+  "scenario_leakage_check": {
+    "train_scenarios": 4770,
+    "val_scenarios": 562,
+    "test_scenarios": 294,
+    "overlap_train_val": 0,
+    "overlap_train_test": 0,
+    "overlap_val_test": 0,
+    "is_leak_free": true
+  }
+}

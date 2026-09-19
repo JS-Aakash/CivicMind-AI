@@ -1,0 +1,147 @@
+{
+  "total_samples": 14917,
+  "split_samples": {
+    "train": 11937,
+    "val": 1486,
+    "test": 1494,
+    "challenge": 750
+  },
+  "class_distribution": {
+    "grievance": {
+      "true": 13103,
+      "false": 1814
+    },
+    "priority": {
+      "high": 6205,
+      "medium": 3215,
+      "critical": 2978,
+      "low": 2519
+    },
+    "severity": {
+      "high": 4512,
+      "medium": 5239,
+      "critical": 2225,
+      "low": 2941
+    },
+    "category": {
+      "sanitation": 1777,
+      "drainage": 1122,
+      "electricity": 2065,
+      "roads": 2492,
+      "transport": 1378,
+      "water": 2974,
+      "public_safety": 744,
+      "street_infrastructure": 739,
+      "healthcare": 1370,
+      "other": 256
+    }
+  },
+  "language_distribution": {
+    "hi": 6283,
+    "ta": 6477,
+    "en": 2157
+  },
+  "variant_distribution": {
+    "minimal": 1179,
+    "voice_transcription": 1456,
+    "urgent": 1567,
+    "informal": 1485,
+    "formal": 1392,
+    "spelling_noise": 1480,
+    "short": 1568,
+    "angry": 1614,
+    "neutral": 1476,
+    "emoji_noise": 1700
+  },
+  "priority_distribution": {
+    "high": 6205,
+    "medium": 3215,
+    "critical": 2978,
+    "low": 2519
+  },
+  "severity_distribution": {
+    "high": 4512,
+    "medium": 5239,
+    "critical": 2225,
+    "low": 2941
+  },
+  "category_distribution": {
+    "sanitation": 1777,
+    "drainage": 1122,
+    "electricity": 2065,
+    "roads": 2492,
+    "transport": 1378,
+    "water": 2974,
+    "public_safety": 744,
+    "street_infrastructure": 739,
+    "healthcare": 1370,
+    "other": 256
+  },
+  "subcategory_distribution": {
+    "overflowing_bin": 381,
+    "public_toilet_issue": 381,
+    "waterlogging": 361,
+    "transformer_issue": 361,
+    "traffic_signal_issue": 376,
+    "damaged_road": 364,
+    "overcrowding": 369,
+    "water_leakage": 391,
+    "bus_unavailable": 378,
+    "contaminated_water": 379,
+    "fallen_wire": 373,
+    "other": 1558,
+    "sewage_overflow": 379,
+    "voltage_issue": 360,
+    "dangerous_wire": 364,
+    "power_outage": 362,
+    "no_water_supply": 392,
+    "street_light_failure": 357,
+    "illegal_dumping": 368,
+    "road_blockage": 377,
+    "water_tanker_issue": 375,
+    "broken_streetlight": 363,
+    "unsafe_area": 380,
+    "pothole": 382,
+    "bus_condition": 382,
+    "broken_footpath": 369,
+    "pipeline_damage": 381,
+    "park_issue": 376,
+    "irregular_supply": 386,
+    "garbage_not_collected": 381,
+    "sanitation_healthcare": 367,
+    "low_water_pressure": 381,
+    "blocked_drain": 382,
+    "general_civic_issue": 256,
+    "doctor_unavailable": 369,
+    "missing_road_sign": 371,
+    "medicine_unavailable": 385
+  },
+  "short_text_statistics": {
+    "total_short_texts_le_4_words": 0,
+    "pct_short_texts": 0.0,
+    "short_by_language": {},
+    "avg_word_count": 17.02,
+    "min_word_count": 6,
+    "max_word_count": 30
+  },
+  "scenario_leakage": {
+    "train_scenarios": 2340,
+    "val_scenarios": 292,
+    "test_scenarios": 294,
+    "leakage_train_val": 0,
+    "leakage_train_test": 0,
+    "leakage_val_test": 0,
+    "is_leak_free": true
+  },
+  "potential_imbalances": [
+    "Short texts (<= 4 words) represent only 0.0% of the dataset (0 samples).",
+    "Non-grievance inquiries comprise 12.2% (1814 samples).",
+    "Priority tiers show High/Medium clustering with lower representation for Low priority.",
+    "19 taxonomy subcategories have zero representation in initial generation."
+  ],
+  "warnings": [
+    "Ultra-short transliterated phrases (e.g., 'thanni varala') suffer from lack of subword anchors.",
+    "Single-label cross entropy causes competition in multi-issue phrases (e.g. 'Road damaged and rain water collecting').",
+    "Temperature calibration is required to convert raw uncalibrated logits into reliable confidence bands."
+  ]
+}

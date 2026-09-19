@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-09-19T02:09:00.557244+00:00",
+  "algorithm_version": "duplicate-v1.0",
+  "weights": {
+    "semantic": 0.55,
+    "geographic": 0.2,
+    "temporal": 0.15,
+    "category": 0.1
+  },
+  "thresholds": {
+    "duplicate_score": 0.82,
+    "related_score": 0.65,
+    "max_duplicate_distance_meters": 500.0,
+    "max_related_distance_meters": 3000.0,
+    "temporal_decay_half_life_hours": 36.0,
+    "candidate_top_k": 20
+  },
+  "evaluation_results": {
+    "total_pairs_evaluated": 500,
+    "precision": 0.942,
+    "recall": 0.918,
+    "f1_score": 0.93,
+    "false_duplicate_rate": 0.038,
+    "false_non_duplicate_rate": 0.052,
+    "accuracy": 0.936
+  }
+}

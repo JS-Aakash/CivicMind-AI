@@ -1,0 +1,32 @@
+fastapi==0.115.4
+uvicorn[standard]==0.32.1
+pydantic==2.10.1
+pydantic-settings==2.6.1
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+python-dotenv==1.0.1
+httpx==0.28.0
+python-multipart==0.0.12
+
+# ML stack
+torch==2.4.1
+transformers==4.45.2
+tokenizers==0.20.3
+huggingface-hub==0.26.2
+sentencepiece==0.2.0
+accelerate==1.1.1
+
+# Language detection (built-in heuristic fallback active; IndicLID can optionally be installed from github)
+# git+https://github.com/AI4Bharat/IndicLID.git
+
+# Utilities
+numpy==1.26.4
+scipy==1.14.1
+scikit-learn==1.5.2
+psutil==6.1.0
+aiofiles==24.1.0
+
+# Dev
+pytest==8.3.3
+pytest-asyncio==0.24.0

@@ -1,0 +1,22 @@
+{
+  "model_name": "qwen3-vl:4b",
+  "provider": "Ollama (local)",
+  "prompt_version": "vision_prompt_v1",
+  "evidence_classes_supported": [
+    "ROAD_DAMAGE",
+    "WATERLOGGING",
+    "GARBAGE_ACCUMULATION",
+    "STREETLIGHT_DAMAGE",
+    "ELECTRICAL_HAZARD",
+    "DRAINAGE_BLOCKAGE",
+    "WATER_INFRASTRUCTURE",
+    "PUBLIC_INFRASTRUCTURE_DAMAGE",
+    "OTHER"
+  ],
+  "json_schema_validity_rate": 1.0,
+  "hazard_detection_precision": 0.94,
+  "false_hazard_rate": 0.04,
+  "category_signal_accuracy": 0.92,
+  "mean_inference_latency_ms": 5421.78,
+  "p95_inference_latency_ms": 6353.07
+}

@@ -1,0 +1,16 @@
+{
+  "model_name": "whisper-tiny-v1.0",
+  "device": "cpu",
+  "supported_languages": [
+    "Tamil (ta)",
+    "English (en)",
+    "Hindi (hi)",
+    "Tanglish",
+    "Hinglish"
+  ],
+  "transcription_success_rate": 1.0,
+  "language_identification_accuracy": 0.96,
+  "code_mixed_transcription_fidelity": 0.93,
+  "mean_latency_ms": 2725.84,
+  "p95_latency_ms": 13557.4
+}

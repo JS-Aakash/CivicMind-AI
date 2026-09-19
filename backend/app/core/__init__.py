@@ -1,0 +1,1 @@
+"""CivicMind AI — Core package"""

@@ -1,0 +1,25 @@
+{
+  "test_suite": "test_module5_multimodal.py",
+  "total_tests": 12,
+  "passed": 12,
+  "failed": 0,
+  "scenarios_tested": [
+    "Text-only complaint pipeline",
+    "Image evidence extraction (Qwen3-VL)",
+    "Multimodal text + image agreement",
+    "Multimodal conflict detection & review flagging",
+    "Voice transcription pipeline (Whisper)",
+    "Native Tamil speech recognition",
+    "Tanglish code-mixed transcription",
+    "Invalid image file rejection (magic-byte checks)",
+    "Oversized audio file rejection",
+    "Graceful degradation on missing media",
+    "Visual hazard escalation to Critical priority",
+    "Citizen tracking response with multilingual templates"
+  ],
+  "regression_tests": {
+    "module_3_routing": 16,
+    "module_4_incidents": 12,
+    "all_passed": true
+  }
+}

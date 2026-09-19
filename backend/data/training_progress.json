@@ -1,0 +1,23 @@
+{
+  "status": "completed",
+  "current_epoch": 2,
+  "total_epochs": 2,
+  "progress_percent": 100.0,
+  "current_loss": 7.655,
+  "validation_accuracy": {
+    "grievance": 1.0,
+    "category": 0.7933,
+    "priority": 0.5792
+  },
+  "temperatures": {
+    "grievance": 0.8615,
+    "category": 0.729,
+    "subcategory": 0.8323,
+    "severity": 0.9112,
+    "priority": 0.9035
+  },
+  "device": "NVIDIA GeForce RTX 3050 6GB Laptop GPU (6.0 GB VRAM)",
+  "model_version": "v1.1",
+  "stage": "Training and Calibration Complete",
+  "elapsed_seconds": 874
+}

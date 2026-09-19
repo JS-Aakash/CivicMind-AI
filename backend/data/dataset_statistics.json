@@ -1,0 +1,71 @@
+{
+  "dataset_version": "v1.0",
+  "total_records": 14917,
+  "splits": {
+    "train": 11937,
+    "validation": 1486,
+    "test": 1494,
+    "challenge": 750
+  },
+  "overall_distribution": {
+    "total": 14917,
+    "languages": {
+      "ta": 6477,
+      "hi": 6283,
+      "en": 2157
+    },
+    "scripts": {
+      "native": 4086,
+      "roman": 10831
+    },
+    "code_mixed": {
+      "false": 6243,
+      "true": 8674
+    },
+    "categories": {
+      "water": 2974,
+      "roads": 2492,
+      "sanitation": 1777,
+      "electricity": 2065,
+      "drainage": 1122,
+      "transport": 1378,
+      "healthcare": 1370,
+      "street_infrastructure": 739,
+      "public_safety": 744,
+      "other": 256
+    },
+    "priorities": {
+      "high": 6205,
+      "critical": 2978,
+      "medium": 3215,
+      "low": 2519
+    },
+    "severities": {
+      "high": 4512,
+      "critical": 2225,
+      "medium": 5239,
+      "low": 2941
+    },
+    "grievance_distribution": {
+      "true": 13103,
+      "false": 1814
+    }
+  },
+  "quality_audit": {
+    "total_submitted": 17532,
+    "valid_records": 15645,
+    "exact_duplicates_removed": 1872,
+    "invalid_records_removed": 15,
+    "issues_breakdown": {
+      "native_hindi_lacks_devanagari_script": 15
+    },
+    "validation_pass_rate": 89.24
+  },
+  "deduplication_audit": {
+    "total_input": 15645,
+    "exact_duplicates": 0,
+    "near_duplicates": 728,
+    "total_removed": 728,
+    "final_count": 14917
+  }
+}

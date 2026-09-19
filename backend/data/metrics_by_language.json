@@ -1,0 +1,37 @@
+{
+  "hi_code_mixed": {
+    "sample_count": 417,
+    "category_accuracy": 0.7434,
+    "category_f1": 0.7762,
+    "priority_f1": 0.4213,
+    "grievance_f1": 1.0
+  },
+  "ta_code_mixed": {
+    "sample_count": 459,
+    "category_accuracy": 0.7865,
+    "category_f1": 0.7983,
+    "priority_f1": 0.4045,
+    "grievance_f1": 1.0
+  },
+  "hi": {
+    "sample_count": 212,
+    "category_accuracy": 0.7689,
+    "category_f1": 0.7698,
+    "priority_f1": 0.4821,
+    "grievance_f1": 1.0
+  },
+  "en": {
+    "sample_count": 213,
+    "category_accuracy": 0.8216,
+    "category_f1": 0.8169,
+    "priority_f1": 0.3651,
+    "grievance_f1": 1.0
+  },
+  "ta": {
+    "sample_count": 193,
+    "category_accuracy": 0.8187,
+    "category_f1": 0.8268,
+    "priority_f1": 0.4349,
+    "grievance_f1": 1.0
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-09-19T02:09:00.553246+00:00",
+  "database_engine": "PostgreSQL + PostGIS + pgvector (with In-Memory Fallback Vector Index)",
+  "vector_index_type": "HNSW",
+  "distance_metric": "cosine (<=>)",
+  "spatial_index_type": "GIST (location)",
+  "query_latencies": {
+    "candidate_knn_retrieval_k20_ms": 3.42,
+    "spatial_dwithin_filter_500m_ms": 1.85,
+    "spatio_temporal_combined_query_ms": 4.12,
+    "map_viewport_bbox_query_ms": 2.65,
+    "incident_lookup_by_id_ms": 0.95
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "model_version": "v1.1",
+  "device": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+  "single_query_e2e": {
+    "p50_ms": 13.25,
+    "p95_ms": 19.35,
+    "p99_ms": 22.67,
+    "mean_ms": 13.9
+  },
+  "model_only": {
+    "p50_ms": 12.89,
+    "p95_ms": 19.25,
+    "mean_ms": 13.59
+  },
+  "extractor_latency": {
+    "p50_ms": 0.2617,
+    "mean_ms": 0.3125
+  },
+  "batch_throughput": {
+    "batch_1": {
+      "batch_size": 1,
+      "avg_latency_ms": 11.29,
+      "throughput_items_per_sec": 88.54
+    },
+    "batch_8": {
+      "batch_size": 8,
+      "avg_latency_ms": 28.34,
+      "throughput_items_per_sec": 282.31
+    },
+    "batch_16": {
+      "batch_size": 16,
+      "avg_latency_ms": 40.3,
+      "throughput_items_per_sec": 397.03
+    },
+    "batch_32": {
+      "batch_size": 32,
+      "avg_latency_ms": 69.58,
+      "throughput_items_per_sec": 459.9
+    },
+    "batch_64": {
+      "batch_size": 64,
+      "avg_latency_ms": 141.99,
+      "throughput_items_per_sec": 450.73
+    }
+  }
+}

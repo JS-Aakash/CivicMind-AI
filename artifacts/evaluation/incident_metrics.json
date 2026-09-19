@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-09-19T02:09:00.559544+00:00",
+  "algorithm_version": "incident-v1.0",
+  "clustering_algorithm": "Spatio-Temporal DBSCAN",
+  "evaluation_results": {
+    "cluster_purity": 0.964,
+    "noise_outlier_percentage": 12.5,
+    "membership_precision": 0.938,
+    "geographic_cohesion_mean": 0.892,
+    "semantic_cohesion_mean": 0.915,
+    "temporal_cohesion_mean": 0.94,
+    "false_incident_rate": 0.024
+  }
+}

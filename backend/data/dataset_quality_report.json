@@ -1,0 +1,10 @@
+{
+  "total_submitted": 17532,
+  "valid_records": 15645,
+  "exact_duplicates_removed": 1872,
+  "invalid_records_removed": 15,
+  "issues_breakdown": {
+    "native_hindi_lacks_devanagari_script": 15
+  },
+  "validation_pass_rate": 89.24
+}

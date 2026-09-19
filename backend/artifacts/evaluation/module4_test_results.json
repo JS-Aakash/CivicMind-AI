@@ -1,0 +1,50 @@
+{
+  "timestamp": "2026-09-19T02:07:18.765350+00:00",
+  "total_cases": 7,
+  "passed_cases": 7,
+  "success_rate": 100.0,
+  "cases": [
+    {
+      "case": "Case 1: Same Water Incident",
+      "status": "PASSED",
+      "details": "Relationship: DUPLICATE (Score: 0.99, Dist: 89.1m)",
+      "latency_ms": 2585.85
+    },
+    {
+      "case": "Case 2: Same Category, Far Away",
+      "status": "PASSED",
+      "details": "Relationship: RELATED (Distance: 422.1km -> Geo Score: 0.0)",
+      "latency_ms": 82.23
+    },
+    {
+      "case": "Case 3: Incompatible Category Overlap",
+      "status": "PASSED",
+      "details": "Category match: 0.6 -> Classification: RELATED",
+      "latency_ms": 103.57
+    },
+    {
+      "case": "Case 4: Multilingual Incident Clustering",
+      "status": "PASSED",
+      "details": "Grouped 5 multilingual reports into 1 unified cluster",
+      "latency_ms": 259.85
+    },
+    {
+      "case": "Case 5: Two Separate Neighborhood Incidents",
+      "status": "PASSED",
+      "details": "Correctly formed 2 distinct incidents across spatial boundaries",
+      "latency_ms": 189.5
+    },
+    {
+      "case": "Case 6: Missing Location Handling",
+      "status": "PASSED",
+      "details": "Semantic comparison conducted without inventing fake geographic proximity",
+      "latency_ms": 83.47
+    },
+    {
+      "case": "Case 7: Single Complaint Isolation",
+      "status": "PASSED",
+      "details": "Single isolated complaint classified as noise (-1) rather than false mature incident",
+      "latency_ms": 43.67
+    }
+  ]
+}

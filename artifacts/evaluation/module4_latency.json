@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-09-19T02:09:00.551251+00:00",
+  "embedding_generation": {
+    "dimension": 768,
+    "mean_ms": 72.75,
+    "p50_ms": 32.98,
+    "p95_ms": 40.22,
+    "p99_ms": 1027.29,
+    "throughput_per_sec": 13.7
+  },
+  "duplicate_candidate_scoring": {
+    "mean_ms": 0.0856,
+    "p50_ms": 0.0753,
+    "p95_ms": 0.1626,
+    "throughput_evaluations_per_sec": 11677.8
+  },
+  "clustering_scalability": {
+    "100_complaints": {
+      "dataset_size": 100,
+      "clustering_latency_ms": 10.99,
+      "discovered_incidents": 0,
+      "throughput_complaints_per_sec": 9102.0
+    },
+    "1000_complaints": {
+      "dataset_size": 1000,
+      "clustering_latency_ms": 312.17,
+      "discovered_incidents": 0,
+      "throughput_complaints_per_sec": 3203.4
+    },
+    "5000_complaints": {
+      "dataset_size": 5000,
+      "clustering_latency_ms": 8004.15,
+      "discovered_incidents": 26,
+      "throughput_complaints_per_sec": 624.7
+    }
+  }
+}
