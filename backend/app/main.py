@@ -72,17 +72,10 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 
-# CORS — allow frontend dev server
+# CORS — allow local frontend dev server and mobile hotspot access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-        settings.FRONTEND_URL,
-    ],
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

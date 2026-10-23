@@ -41,9 +41,9 @@ export default function IncidentsPage() {
         status: filterTab === "resolved" ? "resolved" : undefined,
       });
       setData(res);
-      let list = res.incidents;
+      let list = res.incidents || [];
       if (filterTab === "emerging") {
-        list = list.filter((i) => i.is_emerging);
+        list = list.filter((i: any) => i.is_emerging);
       }
       setIncidents(list);
     } catch {

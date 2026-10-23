@@ -1,7 +1,5 @@
 // CivicMind AI — API Client
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
 import type {
   ComplaintListResponse,
   Complaint,
@@ -38,8 +36,18 @@ import type {
   SystemHealthDetailsResponse,
 } from "./types";
 
+export function getApiBase(): string {
+  if (typeof window !== "undefined") {
+    // In browser, use relative paths so Next.js proxy forwards to backend automatically
+    return "";
+  }
+  // On server-side rendering (SSR), connect directly to local FastAPI instance
+  return process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+}
+
 async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const base = getApiBase();
+  const res = await fetch(`${base}${path}`, {
     headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
   });
@@ -266,7 +274,8 @@ export const uploadAudio = async (file: File, language_hint?: string) => {
   formData.append("file", file);
   if (language_hint) formData.append("language_hint", language_hint);
 
-  const res = await fetch(`${API_BASE}/api/media/audio`, {
+  const base = getApiBase();
+  const res = await fetch(`${base}/api/media/audio`, {
     method: "POST",
     body: formData,
   });
@@ -282,7 +291,8 @@ export const uploadImage = async (file: File, complaint_text?: string) => {
   formData.append("file", file);
   if (complaint_text) formData.append("complaint_text", complaint_text);
 
-  const res = await fetch(`${API_BASE}/api/media/images`, {
+  const base = getApiBase();
+  const res = await fetch(`${base}/api/media/images`, {
     method: "POST",
     body: formData,
   });
